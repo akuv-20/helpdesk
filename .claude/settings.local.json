@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(\"--- routes ---\")",
+      "PowerShell(\"--- app.css ---\")",
+      "PowerShell(\"--- app.js ---\")",
+      "PowerShell(npm install axios 2>&1 | Select-Object -Last 3; \"--- env keys present? ---\"; Select-String -Path .env -Pattern '^APP_NAME|^APP_URL' | ForEach-Object { $_.Line })",
+      "PowerShell(npm run build 2>&1)",
+      "PowerShell(php artisan route:list --except-vendor 2>&1)",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://helpdesk.test/\" -UseBasicParsing -TimeoutSec 20; \"STATUS: $\\($r.StatusCode\\)\"; if\\($r.Content -match 'id=\"app\"'\\){ \"Inertia root: OK\" } else { \"Inertia root: NOT FOUND\" }; if\\($r.Content -match 'data-page'\\){ \"data-page present: OK\" }; \\($r.Content | Select-String -Pattern 'Mesa de Ayuda'\\).Matches.Count } catch { \"ERROR: $\\($_.Exception.Message\\)\"; if\\($_.Exception.Response\\){ $_.Exception.Response.StatusCode } })",
+      "PowerShell(Get-ChildItem tests -Recurse -File | Select-Object Name; \"---\"; Test-Path tests/Pest.php; \\(Get-Content composer.json | ConvertFrom-Json\\).'require-dev'.PSObject.Properties.Name -join ', ')",
+      "PowerShell(php artisan test --filter=PortalFlowTest 2>&1)",
+      "Bash(php artisan *)",
+      "PowerShell(php artisan make:migration create_form_definitions_table 2>&1)",
+      "PowerShell(php artisan migrate:fresh --seed --force 2>&1)",
+      "PowerShell(\"=== TESTS ===\")",
+      "PowerShell(npm install vuedraggable@next 2>&1)",
+      "PowerShell(php artisan test --filter=test_admin_can_update_and_delete 2>&1)",
+      "PowerShell(.\\\\vendor\\\\bin\\\\phpunit --filter test_admin_can_update_and_delete 2>&1)",
+      "PowerShell(php artisan test --filter=AdminFormBuilderTest 2>&1)",
+      "PowerShell(php artisan test 2>&1)",
+      "PowerShell(\"=== BUILD ===\")",
+      "PowerShell(php artisan make:migration create_settings_table 2>&1)",
+      "PowerShell(php artisan migrate --force 2>&1)"
+    ]
+  }
+}
