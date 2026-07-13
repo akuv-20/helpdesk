@@ -17,17 +17,21 @@ en la BD; un solo archivo).
 
 ## 1. Requisitos en el servidor
 
-PHP **8.3+** (GLPI 11 ya lo usa) con extensiones:
+**PHP 8.4** (obligatorio: el `composer.lock` trae Symfony 8.x que exige >= 8.4.1).
+Se instala junto al PHP de GLPI (conviven); NO cambies el `php` por defecto del
+sistema para no afectar el cron/CLI de GLPI — usa `php8.4` explícito en el portal.
 
 ```bash
+# PPA con PHP 8.4 (si no lo tienes)
+sudo add-apt-repository ppa:ondrej/php -y
 sudo apt update
-sudo apt install -y php8.3-fpm php8.3-cli php8.3-mbstring php8.3-xml \
-  php8.3-curl php8.3-sqlite3 php8.3-zip php8.3-bcmath php8.3-intl php8.3-gd \
+sudo apt install -y php8.4-fpm php8.4-cli php8.4-mbstring php8.4-xml \
+  php8.4-curl php8.4-sqlite3 php8.4-zip php8.4-bcmath php8.4-intl php8.4-gd \
   unzip git
 
 # Composer
-php -r "copy('https://getcomposer.org/installer','composer-setup.php');"
-sudo php composer-setup.php --install-dir=/usr/local/bin --filename=composer
+php8.4 -r "copy('https://getcomposer.org/installer','composer-setup.php');"
+sudo php8.4 composer-setup.php --install-dir=/usr/local/bin --filename=composer
 rm composer-setup.php
 
 # Node.js LTS (para compilar los assets en el server)
@@ -35,7 +39,7 @@ curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
 ```
 
-Verifica: `php -v` (>= 8.3), `node -v`, `composer -V`.
+Verifica: `php8.4 -v`, `node -v`, `php8.4 /usr/local/bin/composer -V`.
 
 ## 2. Código
 
@@ -49,7 +53,7 @@ cd /var/www/ticket
 ## 3. Dependencias + build
 
 ```bash
-composer install --no-dev --optimize-autoloader
+php8.4 /usr/local/bin/composer install --no-dev --optimize-autoloader
 npm ci
 npm run build          # genera public/build
 ```
@@ -58,7 +62,7 @@ npm run build          # genera public/build
 
 ```bash
 cp .env.example .env    # o sube tu .env
-php artisan key:generate
+php8.4 artisan key:generate
 ```
 
 Valores mínimos de producción en `.env`:
@@ -99,7 +103,7 @@ GLPI_BASE_URL=https://helpdesk.verfrut.cl
 
 ```bash
 touch database/database.sqlite
-php artisan migrate --force
+php8.4 artisan migrate --force
 ```
 
 ## 6. Permisos (Apache corre como www-data)
@@ -114,12 +118,12 @@ sudo find /var/www/ticket/storage -type d -exec chmod 775 {} \;
 ## 7. Optimización + VirtualHost
 
 ```bash
-php artisan config:cache
-php artisan route:cache
-php artisan view:cache
+php8.4 artisan config:cache
+php8.4 artisan route:cache
+php8.4 artisan view:cache
 ```
 
-> Si luego editas `.env`, vuelve a correr `php artisan config:cache`.
+> Si luego editas `.env`, vuelve a correr `php8.4 artisan config:cache`.
 
 Averigua las rutas del wildcard que ya usa helpdesk y reutilízalas:
 
@@ -133,7 +137,7 @@ Copia el vhost incluido y pega esas rutas de certificado + ajusta la versión de
 sudo cp deploy/apache-ticket.verfrut.cl.conf /etc/apache2/sites-available/
 sudo nano /etc/apache2/sites-available/apache-ticket.verfrut.cl.conf   # pega las rutas del cert
 sudo a2enmod rewrite ssl headers proxy_fcgi setenvif
-sudo a2enconf php8.3-fpm            # si usas PHP-FPM
+sudo a2enconf php8.4-fpm            # FPM del portal (GLPI mantiene el suyo)
 sudo a2ensite apache-ticket.verfrut.cl
 sudo apache2ctl configtest && sudo systemctl reload apache2
 ```
@@ -152,10 +156,10 @@ sudo apache2ctl configtest && sudo systemctl reload apache2
 ```bash
 cd /var/www/ticket
 git pull
-composer install --no-dev --optimize-autoloader
+php8.4 /usr/local/bin/composer install --no-dev --optimize-autoloader
 npm ci && npm run build
-php artisan migrate --force
-php artisan config:cache && php artisan route:cache && php artisan view:cache
+php8.4 artisan migrate --force
+php8.4 artisan config:cache && php8.4 artisan route:cache && php8.4 artisan view:cache
 sudo systemctl reload apache2
 ```
 
