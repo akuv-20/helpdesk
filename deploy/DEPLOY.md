@@ -109,6 +109,8 @@ php8.4 artisan migrate --force
 ## 6. Permisos (Apache corre como www-data)
 
 ```bash
+# public/branding no viene en el repo (imágenes gitignored); se crea aquí.
+mkdir -p /var/www/ticket/public/branding
 sudo chown -R www-data:www-data /var/www/ticket/storage \
   /var/www/ticket/bootstrap/cache /var/www/ticket/database \
   /var/www/ticket/public/branding
