@@ -92,8 +92,8 @@ guardándola en `users.timezone`. Se envía a GLPI **solo** en el alta JIT del u
    **aplicación** `User.Read.All`, client_credentials) para ver qué campos trae Entra. `EntraExplorerController`.
 
 **Admin:** middleware `admin` (`EnsureUserIsAdmin`) + `User::isAdmin()` (local dev-login o email en
-`config/ticket.php` `admins` / env `TICKET_ADMINS`). Menú admin en `AppLayout.vue`: Marca, Acceso,
-Explorar Entra, GLPI.
+`config/ticket.php` `admins` / env `TICKET_ADMINS`). Navbar (`AppLayout.vue`): Home + Aprobaciones para
+todos; admin: Marca, Acceso, Explorar Entra, GLPI, OAuth aprob.
 
 ## Decisión cerrada — additional fields eliminados
 
@@ -108,25 +108,33 @@ un campo nativo y filtrable. Si en el futuro se necesitan campos extra, habría 
   y paginación en "Mis solicitudes" · mantenedores de marca (`/admin/marca`) · provisioning JIT + timezone.
 - **Encuesta de satisfacción:** pendiente. Al cerrar un ticket GLPI genera `TicketSatisfaction`; mostrarla y
   permitir responder desde el portal. (Es la última funcionalidad grande de usuario.)
-- **Mantenedor del 2º cliente OAuth (`oauth_ac`):** falta UI admin para llenar client_id/secret desde la
-  interfaz (hoy en `.env`); `GlpiConfig` ya contempla overrides en `settings` (`glpi.oauth_ac.*`).
-- **Diseño (en curso):** identidad Unifrutti aplicada — paleta corporativa mapeada sobre la escala `blue`
-  de Tailwind v4 (`@theme` en `resources/css/app.css`: `blue-600`=#2463AE, `blue-900`=#0B3456, celeste
-  #E6ECF5) + fuente **Montserrat** + degradado en el login. Pendiente (opcional): navbar con degradado,
-  esquinas más redondeadas, acento rojo `#DA251C`, y subir logo/favicon Unifrutti en `/admin/marca`.
+- **HECHO** — mantenedor del 2º cliente OAuth (`oauth_ac`): `/admin/aprobaciones-oauth` (client_id/secret,
+  secreto cifrado en `settings`). Las pantallas de config tienen **copiar/revelar (ojo)** de valores
+  (`CopyableField.vue`; los secretos se precargan a propósito para verlos/copiarlos, solo en vistas admin).
+- **Diseño (aplicado):** identidad Unifrutti — paleta corporativa mapeada sobre la escala `blue` de
+  Tailwind v4 (`@theme` en `resources/css/app.css`: `blue-600`=#2463AE, `blue-900`=#0B3456, celeste
+  #E6ECF5) + fuente **Montserrat** + degradado en login + **navbar corporativa** (degradado azul, base
+  redondeada, texto blanco, botón Home, iconos). Nombre configurable por `APP_NAME` ("HelpDesk Unifrutti").
+  Pendiente (opcional): versión **blanca** del logo para el navbar oscuro, esquinas más redondeadas en
+  tarjetas, acento rojo `#DA251C`.
 - Correo: GLPI encola bien las notificaciones pero el envío depende del cron `queuednotification`
   (modo GLPI se dispara con visitas web; para envío 24/7 → cron del sistema en modo CLI).
 - **HECHO** — listado por search legacy (híbrido) con **paginación real** + búsqueda + filtro de estado
   server-side (`ticketsForRequesterPaged`); ya no hay tope de 200.
 - **VERIFICADO** — el nivel 2 del árbol ITIL real es exactamente "Incidente"/"Solicitud" (24 categorías),
   así que `categoriesByType` filtra bien. Nada que ajustar.
-- Deploy: Ubuntu dedicado, Caddy (HTTPS auto) + Docker, sesiones en Redis, `ufw` restringido.
+- **DESPLEGADO** en producción: **ticket.verfrut.cl** en el mismo Ubuntu Server que GLPI, con **Apache2 +
+  PHP-FPM 8.4 + SQLite** (sesiones/caché/colas en la BD). Requiere **PHP 8.4** (el `composer.lock` trae
+  Symfony 8.x); se instala junto al PHP de GLPI y se usa `php8.4` explícito para composer/artisan. HTTPS con
+  el **wildcard `*.verfrut.cl`** ya existente (reutilizado del vhost de GLPI). Admins por `TICKET_ADMINS`.
+  Guía y vhost en `deploy/`. Migración futura a `unifrutti.com`: ajustar `APP_URL`, URL base de GLPI y
+  redirect URIs (Entra + OAuth), y usar el wildcard `*.unifrutti.com` (vhost de ejemplo en `deploy/`).
 
 ## Comandos
 
 ```bash
-composer install && npm install
+composer install && npm install   # en el server de prod: php8.4 /usr/local/bin/composer install
 php artisan migrate          # sin seeders: las categorías viven en GLPI
 npm run dev                  # o npm run build
-php artisan test             # 17 tests (PortalFlow, IntegrationModule)
+php artisan test             # 26 tests (PortalFlow, IntegrationModule, Entra, Branding)
 ```
