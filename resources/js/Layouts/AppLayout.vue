@@ -5,6 +5,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 const page = usePage();
 const user = computed(() => page.props.auth?.user);
 const branding = computed(() => page.props.branding ?? {});
+const appName = computed(() => page.props.appName ?? 'HelpDesk Unifrutti');
 
 // Banner de alerta: parpadea brevemente al aparecer y desaparece a los 4s.
 const banner = ref(null); // { type, message, blink }
@@ -41,7 +42,7 @@ function logout() {
                     <img v-if="branding.navbar_logo" :src="branding.navbar_logo" alt="Logo" class="h-8 w-auto max-w-[180px] object-contain" />
                     <template v-else>
                         <span class="grid h-8 w-8 place-items-center rounded-lg bg-blue-600 text-white">●</span>
-                        Mesa de Ayuda
+                        {{ appName }}
                     </template>
                 </Link>
 
