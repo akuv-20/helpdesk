@@ -1,11 +1,17 @@
 # Deploy — Portal Ticket en Ubuntu Server (Apache2 + PHP-FPM + SQLite)
 
-Destino: **ticket.unifrutti.com** en el mismo servidor donde corre GLPI.
-Base de datos: **SQLite** (sesiones/caché/colas también en la BD; un solo archivo).
+Destino actual: **ticket.verfrut.cl** en el mismo servidor donde corre GLPI
+(`helpdesk.verfrut.cl`). Base de datos: **SQLite** (sesiones/caché/colas también
+en la BD; un solo archivo).
 
-> El GLPI está migrando de `verfrut.cl` → `unifrutti.com`. Cuando cambie, hay que
-> actualizar en el portal la **URL base de GLPI** (`/admin/conexion`) y **re-registrar
-> las redirect URIs** de los clientes OAuth (ver paso 8).
+> **Certificado:** el wildcard `*.verfrut.cl` ya instalado para `helpdesk.verfrut.cl`
+> cubre también `ticket.verfrut.cl` — se **reutilizan las mismas rutas** del cert (paso 7),
+> no hay que instalar nada nuevo.
+>
+> **Migración futura a unifrutti.com:** cuando GLPI pase a `unifrutti.com`, cambiar
+> `APP_URL`, la **URL base de GLPI** (`/admin/conexion`) y **re-registrar** las redirect
+> URIs (Entra + cliente OAuth de aprobaciones) al nuevo dominio. Hay un vhost de ejemplo
+> para ese caso en `deploy/apache-ticket.unifrutti.com.conf`.
 
 ---
 
@@ -36,7 +42,7 @@ Verifica: `php -v` (>= 8.3), `node -v`, `composer -V`.
 ```bash
 sudo mkdir -p /var/www/ticket
 sudo chown -R $USER:$USER /var/www/ticket
-# clona o sube el proyecto a /var/www/ticket
+git clone https://github.com/akuv-20/helpdesk.git /var/www/ticket
 cd /var/www/ticket
 ```
 
@@ -60,7 +66,7 @@ Valores mínimos de producción en `.env`:
 ```dotenv
 APP_ENV=production
 APP_DEBUG=false
-APP_URL=https://ticket.unifrutti.com
+APP_URL=https://ticket.verfrut.cl
 
 # NO habilitar en producción
 ALLOW_DEV_LOGIN=false
@@ -71,20 +77,23 @@ DB_DATABASE=/var/www/ticket/database/database.sqlite
 SESSION_DRIVER=database
 SESSION_SECURE_COOKIE=true
 
-# Entra (Puerta A) — redirect debe ser el de producción
+# Entra (Puerta A) — redirect de producción
 MICROSOFT_CLIENT_ID=...
 MICROSOFT_CLIENT_SECRET=...
 MICROSOFT_TENANT_ID=...
-MICROSOFT_REDIRECT_URI=https://ticket.unifrutti.com/auth/entra/callback
+MICROSOFT_REDIRECT_URI=https://ticket.verfrut.cl/auth/entra/callback
 
 # Cliente OAuth de aprobaciones (Puerta C)
 GLPI_AC_CLIENT_ID=...
 GLPI_AC_CLIENT_SECRET=...
+
+# GLPI sigue en helpdesk.verfrut.cl (sin cambios por ahora)
+GLPI_BASE_URL=https://helpdesk.verfrut.cl
 ```
 
-> La conexión a GLPI (URL base, cliente OAuth de servicio, tokens legacy) y también
-> el cliente `oauth_ac` se pueden dejar en `.env` o cargarlos desde la UI admin
-> (`/admin/conexion`, `/admin/acceso`, `/admin/aprobaciones-oauth`), que mandan sobre el `.env`.
+> La conexión a GLPI (URL base, cliente OAuth de servicio, tokens legacy) y el cliente
+> `oauth_ac` también se pueden cargar desde la UI admin (`/admin/conexion`, `/admin/acceso`,
+> `/admin/aprobaciones-oauth`), que mandan sobre el `.env`.
 
 ## 5. Base de datos SQLite + migraciones
 
@@ -112,29 +121,37 @@ php artisan view:cache
 
 > Si luego editas `.env`, vuelve a correr `php artisan config:cache`.
 
+Averigua las rutas del wildcard que ya usa helpdesk y reutilízalas:
+
 ```bash
-# copia el vhost incluido en deploy/ y ajústalo (rutas del cert + versión PHP-FPM)
-sudo cp deploy/apache-ticket.unifrutti.com.conf /etc/apache2/sites-available/
+sudo grep -ri "SSLCertificate" /etc/apache2/sites-available/ | grep -i helpdesk
+```
+
+Copia el vhost incluido y pega esas rutas de certificado + ajusta la versión de PHP-FPM:
+
+```bash
+sudo cp deploy/apache-ticket.verfrut.cl.conf /etc/apache2/sites-available/
+sudo nano /etc/apache2/sites-available/apache-ticket.verfrut.cl.conf   # pega las rutas del cert
 sudo a2enmod rewrite ssl headers proxy_fcgi setenvif
 sudo a2enconf php8.3-fpm            # si usas PHP-FPM
-sudo a2ensite ticket.unifrutti.com
+sudo a2ensite apache-ticket.verfrut.cl
 sudo apache2ctl configtest && sudo systemctl reload apache2
 ```
+
+> Asegúrate de que `ticket.verfrut.cl` resuelva por DNS al servidor (registro A/CNAME).
 
 ## 8. Registrar las redirect URIs (producción)
 
 - **Entra ID** (app registration): agregar redirect URI
-  `https://ticket.unifrutti.com/auth/entra/callback`
+  `https://ticket.verfrut.cl/auth/entra/callback`
 - **Cliente OAuth de aprobaciones en GLPI**: redirect URI
-  `https://ticket.unifrutti.com/tickets/validacion/callback`
-- **URL base de GLPI** en `/admin/conexion`: apuntar al GLPI de `unifrutti.com`
-  cuando se complete su migración.
+  `https://ticket.verfrut.cl/tickets/validacion/callback`
 
 ## 9. Actualizaciones futuras
 
 ```bash
 cd /var/www/ticket
-git pull                      # o subir cambios
+git pull
 composer install --no-dev --optimize-autoloader
 npm ci && npm run build
 php artisan migrate --force
