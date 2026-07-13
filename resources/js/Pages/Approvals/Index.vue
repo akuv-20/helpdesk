@@ -14,7 +14,8 @@ defineProps({
 
     <AppLayout>
         <div class="mb-6">
-            <h1 class="text-xl font-semibold text-slate-900">Aprobaciones</h1>
+            <Link href="/inicio" class="text-sm text-slate-500 hover:underline">← Volver</Link>
+            <h1 class="mt-2 text-xl font-semibold text-slate-900">Aprobaciones</h1>
             <p class="text-sm text-slate-500">Validaciones que te pidieron autorizar.</p>
         </div>
 

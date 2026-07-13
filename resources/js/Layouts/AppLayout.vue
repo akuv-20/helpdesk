@@ -7,6 +7,12 @@ const user = computed(() => page.props.auth?.user);
 const branding = computed(() => page.props.branding ?? {});
 const appName = computed(() => page.props.appName ?? 'HelpDesk Unifrutti');
 
+// Iniciales para el avatar (primeras letras de nombre y apellido).
+const initials = computed(() => {
+    const p = (user.value?.name ?? '').trim().split(/\s+/);
+    return ((p[0]?.[0] ?? '') + (p[1]?.[0] ?? '')).toUpperCase() || '?';
+});
+
 // Banner de alerta: parpadea brevemente al aparecer y desaparece a los 4s.
 const banner = ref(null); // { type, message, blink }
 let hideTimer = null;
@@ -38,16 +44,29 @@ function logout() {
     <div class="min-h-full">
         <header class="border-b border-slate-200 bg-white">
             <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
-                <Link href="/inicio" class="flex items-center gap-2 font-semibold text-slate-900">
-                    <img v-if="branding.navbar_logo" :src="branding.navbar_logo" alt="Logo" class="h-8 w-auto max-w-[180px] object-contain" />
-                    <template v-else>
-                        <span class="grid h-8 w-8 place-items-center rounded-lg bg-blue-600 text-white">●</span>
-                        {{ appName }}
-                    </template>
-                </Link>
+                <div class="flex items-center gap-3">
+                    <Link href="/inicio" class="flex items-center gap-2 font-semibold text-slate-900">
+                        <img v-if="branding.navbar_logo" :src="branding.navbar_logo" alt="Logo" class="h-8 w-auto max-w-[180px] object-contain" />
+                        <template v-else>
+                            <span class="grid h-8 w-8 place-items-center rounded-lg bg-blue-600 text-white">●</span>
+                            {{ appName }}
+                        </template>
+                    </Link>
+                    <!-- Botón Home (casita + texto), a la derecha del logo -->
+                    <Link href="/inicio" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100">
+                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /><path d="M9.5 21v-5h5v5" />
+                        </svg>
+                        Home
+                    </Link>
+                </div>
 
                 <div v-if="user" class="flex items-center gap-3 text-sm">
-                    <Link href="/aprobaciones" class="rounded-md px-3 py-1.5 text-slate-600 transition hover:bg-slate-100">
+                    <Link href="/aprobaciones" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-slate-600 transition hover:bg-slate-100">
+                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z" />
+                            <path d="m9 12 2 2 4-4" />
+                        </svg>
                         Aprobaciones
                     </Link>
                     <template v-if="user.isAdmin">
@@ -67,7 +86,15 @@ function logout() {
                             OAuth aprob.
                         </Link>
                     </template>
-                    <span class="hidden text-slate-500 sm:inline">{{ user.name }}</span>
+                    <div class="hidden items-center gap-2 border-l border-slate-200 pl-3 sm:flex">
+                        <div class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700">
+                            {{ initials }}
+                        </div>
+                        <div class="leading-tight">
+                            <p class="text-sm font-medium text-slate-700">{{ user.name }}</p>
+                            <p class="text-xs text-slate-400">{{ user.email }}</p>
+                        </div>
+                    </div>
                     <button
                         type="button"
                         class="rounded-md px-3 py-1.5 text-slate-600 transition hover:bg-slate-100"
