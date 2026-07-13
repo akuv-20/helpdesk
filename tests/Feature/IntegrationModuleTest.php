@@ -17,7 +17,7 @@ class IntegrationModuleTest extends TestCase
 
     private function admin(): User
     {
-        config(['helpdesk.admins' => ['admin@verfrut.cl']]);
+        config(['ticket.admins' => ['admin@verfrut.cl']]);
 
         return User::factory()->create(['email' => 'admin@verfrut.cl']);
     }
@@ -29,16 +29,18 @@ class IntegrationModuleTest extends TestCase
         $this->actingAs($user)->get('/admin/conexion')->assertForbidden();
     }
 
-    public function test_admin_sees_connection_page_without_exposing_secrets(): void
+    public function test_admin_sees_connection_page_with_prefilled_values(): void
     {
+        // Los secretos se precargan a propósito (admin only) para verlos/copiarlos.
+        app(Settings::class)->setMany(['glpi.oauth.client_secret' => 'secret-xyz']);
+
         $this->actingAs($this->admin())
             ->get('/admin/conexion')
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Admin/Settings/Glpi')
                 ->has('values')
-                ->has('secretsSet')
-                ->missing('values.oauth_client_secret')
+                ->where('values.oauth_client_secret', 'secret-xyz')
             );
     }
 

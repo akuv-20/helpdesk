@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Services\Settings\Settings;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -48,8 +49,27 @@ class HandleInertiaRequests extends Middleware
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),
+                // Número del ticket recién creado → modal de confirmación.
+                'createdTicket' => fn () => $request->session()->get('createdTicket'),
             ],
             'allowDevLogin' => app()->environment('local') && (bool) env('ALLOW_DEV_LOGIN'),
+            'branding' => $this->branding(),
         ];
+    }
+
+    /** Imágenes de marca (logos y fondo) para el front. */
+    private function branding(): array
+    {
+        try {
+            $settings = app(Settings::class);
+
+            return [
+                'navbar_logo' => $settings->get('brand.navbar_logo'),
+                'login_logo' => $settings->get('brand.login_logo'),
+                'login_background' => $settings->get('brand.login_background'),
+            ];
+        } catch (\Throwable) {
+            return [];
+        }
     }
 }

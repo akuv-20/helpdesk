@@ -4,9 +4,20 @@ import { computed } from 'vue';
 
 const page = usePage();
 const flashError = computed(() => page.props.flash?.error);
+const branding = computed(() => page.props.branding ?? {});
 
 // Solo aparece si el backend habilitó el acceso de desarrollo.
 const allowDevLogin = computed(() => page.props.allowDevLogin);
+
+const bgStyle = computed(() =>
+    branding.value.login_background
+        ? {
+              backgroundImage: `url(${branding.value.login_background})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+          }
+        : {},
+);
 
 function devLogin() {
     router.post('/auth/dev-login');
@@ -16,10 +27,19 @@ function devLogin() {
 <template>
     <Head title="Ingresar" />
 
-    <div class="grid min-h-screen place-items-center px-4">
-        <div class="w-full max-w-sm">
+    <div class="grid min-h-screen place-items-center bg-gradient-to-br from-blue-700 to-blue-900 px-4" :style="bgStyle">
+        <div class="w-full max-w-sm rounded-2xl bg-white p-8 shadow-lg">
             <div class="mb-8 text-center">
-                <div class="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-blue-600 text-2xl text-white">
+                <img
+                    v-if="branding.login_logo"
+                    :src="branding.login_logo"
+                    alt="Logo"
+                    class="mx-auto mb-4 max-h-20 w-auto object-contain"
+                />
+                <div
+                    v-else
+                    class="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-blue-600 text-2xl text-white"
+                >
                     ●
                 </div>
                 <h1 class="text-2xl font-semibold text-slate-900">Mesa de Ayuda</h1>
@@ -46,8 +66,11 @@ function devLogin() {
                 class="mt-3 w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm text-slate-600 transition hover:bg-slate-50"
                 @click="devLogin"
             >
-                Acceso de desarrollo
+                Entrar sin Entra ID (temporal)
             </button>
+            <p v-if="allowDevLogin" class="mt-2 text-center text-xs text-slate-400">
+                Acceso de desarrollo mientras se configura Entra. Deshabilítalo con ALLOW_DEV_LOGIN=false.
+            </p>
         </div>
     </div>
 </template>

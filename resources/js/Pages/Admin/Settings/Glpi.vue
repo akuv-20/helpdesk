@@ -2,22 +2,22 @@
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
 import AppLayout from '../../../Layouts/AppLayout.vue';
+import CopyableField from '../../../Components/CopyableField.vue';
 
 const props = defineProps({
     values: { type: Object, default: () => ({}) },
-    secretsSet: { type: Object, default: () => ({}) },
 });
 
 const form = useForm({
     base_url: props.values.base_url ?? '',
     driver: props.values.driver ?? '',
     oauth_client_id: props.values.oauth_client_id ?? '',
-    oauth_client_secret: '',
+    oauth_client_secret: props.values.oauth_client_secret ?? '',
     oauth_username: props.values.oauth_username ?? '',
-    oauth_password: '',
+    oauth_password: props.values.oauth_password ?? '',
     oauth_scope: props.values.oauth_scope ?? 'api',
-    legacy_app_token: '',
-    legacy_user_token: '',
+    legacy_app_token: props.values.legacy_app_token ?? '',
+    legacy_user_token: props.values.legacy_user_token ?? '',
 });
 
 const testing = ref(false);
@@ -45,10 +45,6 @@ async function testConnection() {
 
 const inputClass =
     'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none';
-
-function secretPlaceholder(key) {
-    return props.secretsSet[key] ? '•••••••• (definido — déjalo en blanco para conservar)' : 'No definido';
-}
 </script>
 
 <template>
@@ -56,7 +52,7 @@ function secretPlaceholder(key) {
 
     <AppLayout>
         <div class="mb-6">
-            <Link href="/admin/formularios" class="text-sm text-slate-500 hover:underline">← Administración</Link>
+            <Link href="/inicio" class="text-sm text-slate-500 hover:underline">← Volver</Link>
             <h1 class="mt-2 text-xl font-semibold text-slate-900">Conexión con GLPI</h1>
             <p class="text-sm text-slate-500">Configura cómo el portal se autentica contra la API de GLPI. Los secretos se guardan cifrados.</p>
         </div>
@@ -64,11 +60,7 @@ function secretPlaceholder(key) {
         <form class="space-y-6" @submit.prevent="save">
             <!-- General -->
             <div class="space-y-4 rounded-xl border border-slate-200 bg-white p-5">
-                <div>
-                    <label class="mb-1 block text-sm font-medium text-slate-700">URL base de GLPI</label>
-                    <input v-model="form.base_url" type="url" placeholder="https://helpdesk.verfrut.cl" :class="inputClass" />
-                    <p v-if="form.errors.base_url" class="mt-1 text-xs text-red-600">{{ form.errors.base_url }}</p>
-                </div>
+                <CopyableField v-model="form.base_url" type="url" label="URL base de GLPI" placeholder="https://helpdesk.verfrut.cl" :error="form.errors.base_url" />
                 <div>
                     <label class="mb-1 block text-sm font-medium text-slate-700">Método de autenticación</label>
                     <select v-model="form.driver" :class="inputClass">
@@ -83,26 +75,11 @@ function secretPlaceholder(key) {
             <div v-if="isOauth" class="space-y-4 rounded-xl border border-slate-200 bg-white p-5">
                 <h2 class="text-sm font-semibold text-slate-700">OAuth2 · password grant (usuario de servicio)</h2>
                 <div class="grid gap-4 sm:grid-cols-2">
-                    <div>
-                        <label class="mb-1 block text-sm font-medium text-slate-700">Client ID</label>
-                        <input v-model="form.oauth_client_id" type="text" :class="inputClass" />
-                    </div>
-                    <div>
-                        <label class="mb-1 block text-sm font-medium text-slate-700">Client Secret</label>
-                        <input v-model="form.oauth_client_secret" type="password" :placeholder="secretPlaceholder('oauth_client_secret')" :class="inputClass" autocomplete="new-password" />
-                    </div>
-                    <div>
-                        <label class="mb-1 block text-sm font-medium text-slate-700">Usuario de servicio</label>
-                        <input v-model="form.oauth_username" type="text" :class="inputClass" autocomplete="off" />
-                    </div>
-                    <div>
-                        <label class="mb-1 block text-sm font-medium text-slate-700">Contraseña del usuario</label>
-                        <input v-model="form.oauth_password" type="password" :placeholder="secretPlaceholder('oauth_password')" :class="inputClass" autocomplete="new-password" />
-                    </div>
-                    <div>
-                        <label class="mb-1 block text-sm font-medium text-slate-700">Scope</label>
-                        <input v-model="form.oauth_scope" type="text" placeholder="api" :class="inputClass" />
-                    </div>
+                    <CopyableField v-model="form.oauth_client_id" label="Client ID" />
+                    <CopyableField v-model="form.oauth_client_secret" label="Client Secret" secret autocomplete="new-password" />
+                    <CopyableField v-model="form.oauth_username" label="Usuario de servicio" />
+                    <CopyableField v-model="form.oauth_password" label="Contraseña del usuario" secret autocomplete="new-password" />
+                    <CopyableField v-model="form.oauth_scope" label="Scope" placeholder="api" />
                 </div>
             </div>
 
@@ -110,14 +87,8 @@ function secretPlaceholder(key) {
             <div v-if="isLegacy" class="space-y-4 rounded-xl border border-slate-200 bg-white p-5">
                 <h2 class="text-sm font-semibold text-slate-700">Legacy · apirest.php</h2>
                 <div class="grid gap-4 sm:grid-cols-2">
-                    <div>
-                        <label class="mb-1 block text-sm font-medium text-slate-700">App-Token</label>
-                        <input v-model="form.legacy_app_token" type="password" :placeholder="secretPlaceholder('legacy_app_token')" :class="inputClass" autocomplete="new-password" />
-                    </div>
-                    <div>
-                        <label class="mb-1 block text-sm font-medium text-slate-700">User-Token (cuenta de servicio)</label>
-                        <input v-model="form.legacy_user_token" type="password" :placeholder="secretPlaceholder('legacy_user_token')" :class="inputClass" autocomplete="new-password" />
-                    </div>
+                    <CopyableField v-model="form.legacy_app_token" label="App-Token" secret autocomplete="new-password" />
+                    <CopyableField v-model="form.legacy_user_token" label="User-Token (cuenta de servicio)" secret autocomplete="new-password" />
                 </div>
             </div>
 

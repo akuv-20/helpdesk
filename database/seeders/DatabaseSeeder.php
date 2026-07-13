@@ -2,19 +2,18 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
 {
-    use WithoutModelEvents;
-
     /**
      * Seed the application's database.
+     *
+     * Las categorías ITIL viven en GLPI; el portal no las siembra. En modo
+     * demo (sin GLPI configurado) el wizard usa un árbol de ejemplo interno.
      */
     public function run(): void
     {
-        $this->call(FormDefinitionSeeder::class);
+        //
     }
 }

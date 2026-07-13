@@ -25,15 +25,14 @@ class IntegrationController extends Controller
             'values' => [
                 'base_url' => $this->settings->get('glpi.base_url', config('glpi.base_url')),
                 'driver' => $this->settings->get('glpi.driver', config('glpi.driver')),
-                'oauth_client_id' => $this->settings->get('glpi.oauth.client_id'),
-                'oauth_username' => $this->settings->get('glpi.oauth.username'),
+                'oauth_client_id' => $this->settings->get('glpi.oauth.client_id', config('glpi.oauth.client_id')),
+                'oauth_username' => $this->settings->get('glpi.oauth.username', config('glpi.oauth.username')),
                 'oauth_scope' => $this->settings->get('glpi.oauth.scope', 'api'),
-            ],
-            'secretsSet' => [
-                'oauth_client_secret' => $this->settings->has('glpi.oauth.client_secret'),
-                'oauth_password' => $this->settings->has('glpi.oauth.password'),
-                'legacy_app_token' => $this->settings->has('glpi.legacy.app_token'),
-                'legacy_user_token' => $this->settings->has('glpi.legacy.user_token'),
+                // Secretos reales precargados para poder verlos/copiarlos (admin only).
+                'oauth_client_secret' => $this->settings->get('glpi.oauth.client_secret', config('glpi.oauth.client_secret')),
+                'oauth_password' => $this->settings->get('glpi.oauth.password', config('glpi.oauth.password')),
+                'legacy_app_token' => $this->settings->get('glpi.legacy.app_token', config('glpi.legacy.app_token')),
+                'legacy_user_token' => $this->settings->get('glpi.legacy.user_token', config('glpi.legacy.user_token')),
             ],
         ]);
     }

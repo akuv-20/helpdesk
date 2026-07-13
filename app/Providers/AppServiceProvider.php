@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Services\Glpi\GlpiClient;
 use App\Services\Glpi\GlpiConfig;
+use App\Services\Glpi\GlpiUserOAuth;
 use App\Services\Settings\Settings;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
@@ -19,6 +20,10 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(Settings::class);
 
         $this->app->singleton(GlpiClient::class, fn ($app) => new GlpiClient(
+            GlpiConfig::resolve($app->make(Settings::class))
+        ));
+
+        $this->app->singleton(GlpiUserOAuth::class, fn ($app) => new GlpiUserOAuth(
             GlpiConfig::resolve($app->make(Settings::class))
         ));
     }

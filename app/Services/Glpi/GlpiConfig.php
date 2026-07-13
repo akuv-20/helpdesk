@@ -25,7 +25,12 @@ class GlpiConfig
         $cfg['oauth']['password'] = $settings->get('glpi.oauth.password', $cfg['oauth']['password']);
         $cfg['oauth']['scope'] = $settings->get('glpi.oauth.scope', $cfg['oauth']['scope']);
         $cfg['oauth']['token_url'] = $base.'/api.php/token';
+        $cfg['oauth']['authorize_url'] = $base.'/api.php/authorize';
         $cfg['oauth']['api_url'] = $base.'/api.php/v2';
+
+        // Cliente authorization_code (aprobar validaciones como el propio usuario).
+        $cfg['oauth_ac']['client_id'] = $settings->get('glpi.oauth_ac.client_id', $cfg['oauth_ac']['client_id']);
+        $cfg['oauth_ac']['client_secret'] = $settings->get('glpi.oauth_ac.client_secret', $cfg['oauth_ac']['client_secret']);
 
         $cfg['legacy']['app_token'] = $settings->get('glpi.legacy.app_token', $cfg['legacy']['app_token']);
         $cfg['legacy']['user_token'] = $settings->get('glpi.legacy.user_token', $cfg['legacy']['user_token']);

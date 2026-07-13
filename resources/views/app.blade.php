@@ -7,6 +7,13 @@
 
     <title inertia>{{ config('app.name', 'Mesa de Ayuda') }}</title>
 
+    <link rel="icon" href="{{ rescue(fn () => app(\App\Services\Settings\Settings::class)->get('brand.favicon'), null, false) ?: '/favicon.ico' }}">
+
+    {{-- Tipografía corporativa Unifrutti --}}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+
     @vite(['resources/js/app.js'])
     @inertiaHead
 </head>

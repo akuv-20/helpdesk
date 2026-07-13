@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-#[Fillable(['name', 'email', 'password', 'azure_oid'])]
+#[Fillable(['name', 'email', 'password', 'azure_oid', 'timezone'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
@@ -27,7 +27,34 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            // Tokens OAuth del usuario contra GLPI: cifrados en BD.
+            'glpi_access_token' => 'encrypted',
+            'glpi_refresh_token' => 'encrypted',
+            'glpi_token_expires_at' => 'datetime',
         ];
+    }
+
+    /** ¿Hay un access token de GLPI aún vigente (con margen de 1 min)? */
+    public function hasValidGlpiToken(): bool
+    {
+        return filled($this->glpi_access_token)
+            && $this->glpi_token_expires_at
+            && $this->glpi_token_expires_at->isAfter(now()->addMinute());
+    }
+
+    /**
+     * Guarda el juego de tokens OAuth de GLPI. Conserva el refresh anterior si
+     * la respuesta no trae uno nuevo.
+     *
+     * @param  array{access:string, refresh:?string, expires_at:\Illuminate\Support\Carbon}  $tokens
+     */
+    public function storeGlpiTokens(array $tokens): void
+    {
+        $this->forceFill([
+            'glpi_access_token' => $tokens['access'],
+            'glpi_refresh_token' => $tokens['refresh'] ?: $this->glpi_refresh_token,
+            'glpi_token_expires_at' => $tokens['expires_at'],
+        ])->save();
     }
 
     /** ¿Tiene acceso al área de administración (builder de formularios)? */
@@ -37,6 +64,6 @@ class User extends Authenticatable
             return true;
         }
 
-        return in_array($this->email, config('helpdesk.admins', []), true);
+        return in_array($this->email, config('ticket.admins', []), true);
     }
 }

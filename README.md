@@ -36,7 +36,7 @@ php artisan migrate
 npm run dev                 # o: npm run build
 ```
 
-Con Laravel Herd el sitio queda en `https://helpdesk.test`.
+Con Laravel Herd el sitio queda en `https://ticket.test`.
 
 Para probar la UI sin Entra todavía, en `.env` (solo local):
 ```

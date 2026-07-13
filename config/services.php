@@ -44,6 +44,9 @@ return [
         'client_secret' => env('MICROSOFT_CLIENT_SECRET'),
         'redirect' => env('MICROSOFT_REDIRECT_URI'),
         'tenant' => env('MICROSOFT_TENANT_ID', 'common'),
+        // Campo extra que el provider agrega al $select de Graph /me. Lo
+        // usamos para derivar la zona horaria del usuario al iniciar sesión.
+        'fields' => ['country'],
     ],
 
 ];

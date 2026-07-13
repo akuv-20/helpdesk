@@ -59,6 +59,19 @@ return [
     ],
 
     /*
+    | Cliente OAuth authorization_code para acciones que exigen la identidad del
+    | PROPIO usuario (p. ej. aprobar/rechazar validaciones): GLPI solo permite
+    | que el validador responda desde su sesión, así que el backend obtiene un
+    | token del usuario (login por SAML/Entra, casi transparente) y actúa como
+    | él, no como la cuenta de servicio. Redirect URI a registrar en GLPI:
+    | {APP_URL}/tickets/validacion/callback
+    */
+    'oauth_ac' => [
+        'client_id' => env('GLPI_AC_CLIENT_ID'),
+        'client_secret' => env('GLPI_AC_CLIENT_SECRET'),
+    ],
+
+    /*
     | Cómo mapeamos a la persona autenticada por Entra con su usuario de GLPI.
     | Por defecto buscamos por email. El backend impone el solicitante; el
     | usuario nunca puede pedir tickets de otra persona.

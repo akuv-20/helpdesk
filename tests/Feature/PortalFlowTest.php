@@ -2,7 +2,6 @@
 
 namespace Tests\Feature;
 
-use App\Models\FormDefinition;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -47,30 +46,103 @@ class PortalFlowTest extends TestCase
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Tickets/Create')
                 ->has('types', 2)
-                ->has('categories')
             );
     }
 
-    public function test_form_schema_returns_seeded_branch(): void
+    public function test_categories_endpoint_returns_nested_tree_filtered_by_incident(): void
     {
         $user = User::factory()->create();
-        $this->seedSupportBranch();
 
-        $this->actingAs($user)
-            ->getJson('/tickets/form-schema?type=incident&itil_category_id=1')
+        $areas = $this->actingAs($user)
+            ->getJson('/tickets/categorias?type=incident')
             ->assertOk()
-            ->assertJson(['configured' => true])
-            ->assertJsonPath('fields.0.key', 'equipo');
+            ->json('areas');
+
+        $allNames = $this->collectNames($areas);
+        $leafNames = $this->collectLeafNames($areas);
+
+        // Hojas de distinta profundidad conviven:
+        $this->assertContains('Equipos Computacionales', $leafNames); // nivel 3
+        $this->assertContains('Error', $leafNames);                   // nivel 4 (Sistemas > Frusys)
+        // El sistema intermedio es navegación, NO una hoja seleccionable:
+        $this->assertNotContains('Frusys', $leafNames);
+        $this->assertContains('Frusys', $allNames);
+        // El nivel Incidente/Solicitud nunca aparece:
+        $this->assertNotContains('Incidente', $allNames);
+        $this->assertNotContains('Solicitud', $allNames);
+        // Otra rama filtrada:
+        $this->assertNotContains('Desbloqueo Web', $allNames);
     }
 
-    public function test_form_schema_reports_unconfigured_branch(): void
+    public function test_categories_endpoint_filters_by_request(): void
     {
         $user = User::factory()->create();
 
-        $this->actingAs($user)
-            ->getJson('/tickets/form-schema?type=request&itil_category_id=99')
+        $areas = $this->actingAs($user)
+            ->getJson('/tickets/categorias?type=request')
             ->assertOk()
-            ->assertJson(['configured' => false, 'fields' => []]);
+            ->json('areas');
+
+        $leafNames = $this->collectLeafNames($areas);
+
+        $this->assertContains('Desbloqueo Web', $leafNames);   // nivel 3
+        $this->assertContains('Desarrollo', $leafNames);       // nivel 4 (Sistemas)
+        $this->assertNotContains('Equipos Computacionales', $leafNames);
+    }
+
+    public function test_leaves_carry_a_glpi_category_id(): void
+    {
+        $user = User::factory()->create();
+
+        $areas = $this->actingAs($user)
+            ->getJson('/tickets/categorias?type=incident')
+            ->assertOk()
+            ->json('areas');
+
+        foreach ($this->collectLeaves($areas) as $leaf) {
+            $this->assertIsInt($leaf['id'], "La hoja {$leaf['name']} debe traer id de GLPI.");
+        }
+    }
+
+    public function test_ticket_detail_is_not_found_in_demo_or_when_not_owned(): void
+    {
+        $user = User::factory()->create();
+
+        // Sin GLPI configurado (demo) o ticket ajeno => 404, nunca expone datos.
+        $this->actingAs($user)->get('/tickets/123')->assertNotFound();
+    }
+
+    /** @return array<int, string> */
+    private function collectNames(array $nodes): array
+    {
+        $names = [];
+        foreach ($nodes as $n) {
+            $names[] = $n['name'];
+            $names = array_merge($names, $this->collectNames($n['children']));
+        }
+
+        return $names;
+    }
+
+    /** @return array<int, string> */
+    private function collectLeafNames(array $nodes): array
+    {
+        return array_map(fn ($l) => $l['name'], $this->collectLeaves($nodes));
+    }
+
+    /** @return array<int, array{id:?int, name:string, children:array}> */
+    private function collectLeaves(array $nodes): array
+    {
+        $leaves = [];
+        foreach ($nodes as $n) {
+            if (empty($n['children'])) {
+                $leaves[] = $n;
+            } else {
+                $leaves = array_merge($leaves, $this->collectLeaves($n['children']));
+            }
+        }
+
+        return $leaves;
     }
 
     public function test_ticket_validation_rejects_short_subject(): void
@@ -79,60 +151,44 @@ class PortalFlowTest extends TestCase
 
         $this->actingAs($user)
             ->from('/tickets/nuevo')
-            ->post('/tickets', ['type' => 'incident', 'itil_category_id' => 1, 'subject' => 'x'])
+            ->post('/tickets', [
+                'type' => 'incident',
+                'itil_category_id' => 21,
+                'subject' => 'x',
+                'description' => 'Descripción suficientemente larga.',
+            ])
             ->assertRedirect('/tickets/nuevo')
             ->assertSessionHasErrors('subject');
     }
 
-    public function test_ticket_requires_visible_conditional_field(): void
+    public function test_ticket_validation_requires_description(): void
     {
         $user = User::factory()->create();
-        $this->seedSupportBranch();
 
-        // "equipo=impresora" hace visible y requerido "modelo_impresora".
         $this->actingAs($user)
             ->from('/tickets/nuevo')
             ->post('/tickets', [
                 'type' => 'incident',
-                'itil_category_id' => 1,
+                'itil_category_id' => 21,
                 'subject' => 'Impresora no imprime',
-                'answers' => ['equipo' => 'impresora', 'detalle' => 'No responde'],
             ])
             ->assertRedirect('/tickets/nuevo')
-            ->assertSessionHasErrors('answers.modelo_impresora');
+            ->assertSessionHasErrors('description');
     }
 
     public function test_ticket_store_fails_gracefully_when_glpi_not_configured(): void
     {
         $user = User::factory()->create();
-        $this->seedSupportBranch();
 
         $this->actingAs($user)
             ->from('/tickets/nuevo')
             ->post('/tickets', [
                 'type' => 'incident',
-                'itil_category_id' => 1,
+                'itil_category_id' => 21,
                 'subject' => 'No puedo acceder al correo',
-                'answers' => ['equipo' => 'correo', 'detalle' => 'Outlook no abre desde hoy.'],
+                'description' => 'Outlook no abre desde esta mañana.',
             ])
             ->assertRedirect('/tickets/nuevo')
             ->assertSessionHas('error');
-    }
-
-    private function seedSupportBranch(): void
-    {
-        FormDefinition::create([
-            'type' => 'incident',
-            'itil_category_id' => 1,
-            'name' => 'Incidente · Soporte',
-            'is_active' => true,
-            'fields' => [
-                ['key' => 'equipo', 'label' => 'Equipo', 'input' => 'select', 'required' => true,
-                    'options' => [['value' => 'impresora', 'label' => 'Impresora'], ['value' => 'correo', 'label' => 'Correo']]],
-                ['key' => 'modelo_impresora', 'label' => 'Modelo', 'input' => 'text', 'required' => true,
-                    'showIf' => ['field' => 'equipo', 'equals' => 'impresora']],
-                ['key' => 'detalle', 'label' => 'Detalle', 'input' => 'textarea', 'required' => true],
-            ],
-        ]);
     }
 }

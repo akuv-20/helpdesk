@@ -20,8 +20,10 @@ class Settings
     public const SECRET_KEYS = [
         'glpi.oauth.client_secret',
         'glpi.oauth.password',
+        'glpi.oauth_ac.client_secret',
         'glpi.legacy.app_token',
         'glpi.legacy.user_token',
+        'entra.client_secret',
     ];
 
     /** @return array<string, string|null> */
