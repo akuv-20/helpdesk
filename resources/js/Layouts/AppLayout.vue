@@ -42,18 +42,18 @@ function logout() {
 
 <template>
     <div class="min-h-full">
-        <header class="border-b border-slate-200 bg-white">
+        <header class="rounded-b-3xl bg-[linear-gradient(265deg,#2463AF_0%,#0B3456_100%)] shadow-lg">
             <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
                 <div class="flex items-center gap-3">
-                    <Link href="/inicio" class="flex items-center gap-2 font-semibold text-slate-900">
-                        <img v-if="branding.navbar_logo" :src="branding.navbar_logo" alt="Logo" class="h-8 w-auto max-w-[180px] object-contain" />
+                    <Link href="/inicio" class="flex items-center gap-2 font-semibold text-white">
+                        <img v-if="branding.navbar_logo" :src="branding.navbar_logo" alt="Logo" class="h-9 w-auto max-w-[180px] object-contain" />
                         <template v-else>
-                            <span class="grid h-8 w-8 place-items-center rounded-lg bg-blue-600 text-white">●</span>
+                            <span class="grid h-8 w-8 place-items-center rounded-lg bg-white/15 text-white">●</span>
                             {{ appName }}
                         </template>
                     </Link>
                     <!-- Botón Home (casita + texto), a la derecha del logo -->
-                    <Link href="/inicio" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100">
+                    <Link href="/inicio" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium text-white/90 transition hover:bg-white/10">
                         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M3 10.5 12 3l9 7.5" /><path d="M5 9.5V21h14V9.5" /><path d="M9.5 21v-5h5v5" />
                         </svg>
@@ -62,7 +62,7 @@ function logout() {
                 </div>
 
                 <div v-if="user" class="flex items-center gap-3 text-sm">
-                    <Link href="/aprobaciones" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-slate-600 transition hover:bg-slate-100">
+                    <Link href="/aprobaciones" class="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-white/90 transition hover:bg-white/10">
                         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z" />
                             <path d="m9 12 2 2 4-4" />
@@ -70,34 +70,34 @@ function logout() {
                         Aprobaciones
                     </Link>
                     <template v-if="user.isAdmin">
-                        <Link href="/admin/marca" class="rounded-md px-3 py-1.5 text-slate-600 transition hover:bg-slate-100">
+                        <Link href="/admin/marca" class="rounded-md px-3 py-1.5 text-white/90 transition hover:bg-white/10">
                             Marca
                         </Link>
-                        <Link href="/admin/acceso" class="rounded-md px-3 py-1.5 text-slate-600 transition hover:bg-slate-100">
+                        <Link href="/admin/acceso" class="rounded-md px-3 py-1.5 text-white/90 transition hover:bg-white/10">
                             Acceso
                         </Link>
-                        <Link href="/admin/explorador-entra" class="rounded-md px-3 py-1.5 text-slate-600 transition hover:bg-slate-100">
+                        <Link href="/admin/explorador-entra" class="rounded-md px-3 py-1.5 text-white/90 transition hover:bg-white/10">
                             Explorar Entra
                         </Link>
-                        <Link href="/admin/conexion" class="rounded-md px-3 py-1.5 text-slate-600 transition hover:bg-slate-100">
+                        <Link href="/admin/conexion" class="rounded-md px-3 py-1.5 text-white/90 transition hover:bg-white/10">
                             GLPI
                         </Link>
-                        <Link href="/admin/aprobaciones-oauth" class="rounded-md px-3 py-1.5 text-slate-600 transition hover:bg-slate-100">
+                        <Link href="/admin/aprobaciones-oauth" class="rounded-md px-3 py-1.5 text-white/90 transition hover:bg-white/10">
                             OAuth aprob.
                         </Link>
                     </template>
-                    <div class="hidden items-center gap-2 border-l border-slate-200 pl-3 sm:flex">
-                        <div class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700">
+                    <div class="hidden items-center gap-2 border-l border-white/20 pl-3 sm:flex">
+                        <div class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/20 text-xs font-semibold text-white">
                             {{ initials }}
                         </div>
                         <div class="leading-tight">
-                            <p class="text-sm font-medium text-slate-700">{{ user.name }}</p>
-                            <p class="text-xs text-slate-400">{{ user.email }}</p>
+                            <p class="text-sm font-medium text-white">{{ user.name }}</p>
+                            <p class="text-xs text-white/60">{{ user.email }}</p>
                         </div>
                     </div>
                     <button
                         type="button"
-                        class="rounded-md px-3 py-1.5 text-slate-600 transition hover:bg-slate-100"
+                        class="rounded-md px-3 py-1.5 text-white/90 transition hover:bg-white/10"
                         @click="logout"
                     >
                         Salir
