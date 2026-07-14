@@ -263,14 +263,48 @@ class GlpiClient
         $ticket = $resp->json() ?? [];
         $ticketId = $ticket['id'] ?? null;
 
-        // Adjuntos normales (no inline) tras crear.
         if ($ticketId) {
+            // GLPI fija users_id_recipient con el usuario del token al CREAR
+            // (ignora el del input), así que corregimos el "Abierto por" al
+            // solicitante con un update posterior.
+            $this->fixTicketRecipient((int) $ticketId, $userId);
+
+            // Adjuntos normales (no inline) tras crear.
             foreach ($data['attachments'] ?? [] as $file) {
                 $this->uploadDocument($ticketId, $file);
             }
         }
 
         return $ticket;
+    }
+
+    /**
+     * Fuerza el "Abierto por" (users_id_recipient) al solicitante mediante un
+     * update, porque GLPI lo fija con el usuario del token al crear e ignora el
+     * del input. Relee el ticket y avisa por log si GLPI igual lo ignora (para
+     * saber si es un límite de la instancia). No lanza excepción: es cosmético.
+     */
+    protected function fixTicketRecipient(int $ticketId, int $userId): void
+    {
+        try {
+            $this->legacyHttp()->put("/Ticket/{$ticketId}", ['input' => [
+                'id' => $ticketId,
+                'users_id_recipient' => $userId,
+            ]]);
+
+            $after = $this->legacyHttp()->get("/Ticket/{$ticketId}")->json();
+            $got = (int) ($after['users_id_recipient'] ?? 0);
+
+            if ($got !== $userId) {
+                Log::warning('GLPI: no se pudo fijar users_id_recipient al solicitante (GLPI lo sobreescribe).', [
+                    'ticket' => $ticketId, 'want' => $userId, 'got' => $got,
+                ]);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('GLPI: excepción al fijar users_id_recipient', [
+                'ticket' => $ticketId, 'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /** Verifica que estén los tokens legacy (necesarios para escribir en GLPI). */
