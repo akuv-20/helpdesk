@@ -155,15 +155,29 @@ sudo apache2ctl configtest && sudo systemctl reload apache2
 
 ## 9. Actualizaciones futuras
 
+Un solo comando (trae código, deps, assets, migra, regenera cachés y recarga PHP-FPM):
+
+```bash
+cd /var/www/ticket
+bash deploy/update.sh
+```
+
+El script deja el sitio en **modo mantenimiento** mientras dura y lo levanta al terminar.
+Equivale a estos pasos manuales:
+
 ```bash
 cd /var/www/ticket
 git pull
 php8.4 /usr/local/bin/composer install --no-dev --optimize-autoloader
 npm ci && npm run build
 php8.4 artisan migrate --force
-php8.4 artisan config:cache && php8.4 artisan route:cache && php8.4 artisan view:cache
-sudo systemctl reload apache2
+php8.4 artisan optimize:clear
+php8.4 artisan optimize && php8.4 artisan view:cache
+sudo systemctl reload php8.4-fpm   # ← clave: recarga OPcache (si no, rutas/código nuevo dan 404)
 ```
+
+> **Importante:** tras cambios en rutas/código hay que **recargar `php8.4-fpm`** (OPcache), no solo
+> `apache2`. Omitir esto es lo que causaba el 404 en rutas nuevas como `/admin/categorias`.
 
 ---
 
