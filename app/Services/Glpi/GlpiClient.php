@@ -241,6 +241,10 @@ class GlpiClient
             'impact' => 1,
             'itilcategories_id' => (int) ($data['category_id'] ?? 0),
             '_users_id_requester' => $userId,
+            // "Abierto por"/Redactor = el solicitante, no la cuenta de servicio.
+            // GLPI respeta users_id_recipient si viene explícito (solo lo
+            // autocompleta con el usuario del token cuando no se envía).
+            'users_id_recipient' => $userId,
         ];
         if ($tags) {
             $input['_filename'] = array_map(fn ($f) => $f->getClientOriginalName(), $inlineFiles);
