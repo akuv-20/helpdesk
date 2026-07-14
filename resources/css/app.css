@@ -27,4 +27,12 @@
 
     /* Rojo corporativo (acento de marca). Los rojos de error siguen siendo los de Tailwind. */
     --color-brand-red: #da251c;
+
+    /*
+    | Radio de las tarjetas. Casi todas las tarjetas/contenedores del portal usan
+    | `rounded-xl`; subimos ESE token para redondearlas más de forma consistente
+    | sin tocar cada vista. Botones/inputs (rounded-lg) y navbar (rounded-b-3xl)
+    | no se ven afectados.
+    */
+    --radius-xl: 1rem;
 }

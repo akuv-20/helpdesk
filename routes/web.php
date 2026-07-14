@@ -62,6 +62,10 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::get('/explorador-entra', [EntraExplorerController::class, 'show'])->name('entra.explorer');
     Route::post('/explorador-entra', [EntraExplorerController::class, 'lookup'])->name('entra.explorer.lookup');
 
+    // Visor del árbol de categorías ITIL + alta de subcategorías bajo un nodo
+    Route::get('/categorias', [\App\Http\Controllers\Admin\CategoryTreeController::class, 'show'])->name('categories.tree');
+    Route::post('/categorias', [\App\Http\Controllers\Admin\CategoryTreeController::class, 'store'])->name('categories.store');
+
     // Puerta C — cliente OAuth de aprobaciones (authorization_code por-usuario)
     Route::get('/aprobaciones-oauth', [\App\Http\Controllers\Admin\ApprovalOauthController::class, 'edit'])->name('approval-oauth.edit');
     Route::put('/aprobaciones-oauth', [\App\Http\Controllers\Admin\ApprovalOauthController::class, 'update'])->name('approval-oauth.update');

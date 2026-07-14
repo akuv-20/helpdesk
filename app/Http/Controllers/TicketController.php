@@ -147,6 +147,8 @@ class TicketController extends Controller
                 return back()->with('error', $e->getMessage());
             }
 
+            GlpiClient::forgetPendingApprovalsCount($request->user()->id);
+
             return back()->with('success', $this->validationSuccessMessage($data['action']));
         }
 
@@ -174,6 +176,7 @@ class TicketController extends Controller
 
             $ticketId = (int) ($intent['ticket'] ?? 0);
             $glpi->respondValidationWithToken($tokens['access'], $ticketId, $intent['action'] ?? '', $intent['comment'] ?? null);
+            GlpiClient::forgetPendingApprovalsCount($request->user()->id);
         } catch (GlpiException $e) {
             $ticketId = $intent['ticket'] ?? null;
 

@@ -467,6 +467,31 @@ class GlpiClient
     }
 
     /**
+     * Cantidad de aprobaciones pendientes del usuario, cacheada ~60s por usuario
+     * para no escanear GLPI en cada navegación (se usa en el badge global del
+     * navbar). Se invalida al responder una validación (forgetPendingApprovalsCount).
+     */
+    public function cachedPendingApprovalsCount(string $email, int|string $userKey): int
+    {
+        return Cache::remember(
+            self::pendingApprovalsCountCacheKey($userKey),
+            now()->addSeconds(60),
+            fn () => count($this->pendingApprovalsForUser($email)),
+        );
+    }
+
+    /** Invalida el contador cacheado de aprobaciones pendientes de un usuario. */
+    public static function forgetPendingApprovalsCount(int|string $userKey): void
+    {
+        Cache::forget(self::pendingApprovalsCountCacheKey($userKey));
+    }
+
+    protected static function pendingApprovalsCountCacheKey(int|string $userKey): string
+    {
+        return "glpi:pending_approvals_count:{$userKey}";
+    }
+
+    /**
      * Historial de validaciones que el usuario YA respondió (aprobó/rechazó).
      * Escaneo acotado: mira tickets con global_validation != 1 (los que tienen
      * validaciones) y recoge las respondidas por él. No escala a miles.
@@ -1055,6 +1080,101 @@ class GlpiClient
     }
 
     /**
+     * Crea una subcategoría ITIL bajo el nodo indicado por su RUTA en el árbol
+     * del portal (p. ej. ["Sistemas","Frusys"]) dentro de la rama $branch
+     * (incident|request).
+     *
+     * Ojo: el endpoint de categorías que alimenta el árbol NO devuelve las
+     * categorías contenedoras (solo las hojas asignables), por eso los nodos
+     * intermedios llegan sin id. Aquí resolvemos el id real del padre a partir
+     * de su `completename` reconstruido —insertando el nivel Incidente/Solicitud
+     * que el árbol pliega— contra el listado legacy COMPLETO (que sí incluye los
+     * contenedores). Luego GLPI calcula solo el completename/level del hijo.
+     * Requiere tokens legacy (escritura por apirest.php).
+     *
+     * @param  array<int, string>  $path  Ruta visible del nodo padre (sin el nivel Incidente/Solicitud).
+     * @return array{id:int, name:string}
+     */
+    public function createCategory(array $path, string $branch, string $name): array
+    {
+        if (! $this->isConfigured()) {
+            throw new GlpiException('La conexión con GLPI no está configurada.');
+        }
+        $this->requireLegacy();
+
+        $name = trim($name);
+        if ($name === '') {
+            throw new GlpiException('Indica un nombre para la categoría.');
+        }
+
+        $path = array_values(array_filter(array_map('trim', $path), fn ($s) => $s !== ''));
+        if (! $path) {
+            throw new GlpiException('No se pudo determinar la categoría padre.');
+        }
+
+        // Ruta REAL en GLPI: Área > Incidente|Solicitud > (resto de la ruta…).
+        $branchLabel = $branch === 'incident' ? 'Incidente' : 'Solicitud';
+        $realParent = $path[0].' > '.$branchLabel;
+        if (count($path) > 1) {
+            $realParent .= ' > '.implode(' > ', array_slice($path, 1));
+        }
+
+        // Mapa completename(minúsculas) => id de TODAS las categorías (incluye
+        // contenedores), para resolver el padre y detectar duplicados.
+        $map = $this->allCategoriesByCompletename();
+
+        $parentId = $map[mb_strtolower($realParent)] ?? null;
+        if ($parentId === null) {
+            throw new GlpiException("No se encontró la categoría padre «{$realParent}» en GLPI.");
+        }
+
+        if (isset($map[mb_strtolower($realParent.' > '.$name)])) {
+            throw new GlpiException("Ya existe una categoría «{$name}» en esa rama.");
+        }
+
+        $resp = $this->legacyHttp()->post('/ITILCategory', ['input' => [
+            'name' => $name,
+            'itilcategories_id' => $parentId,
+        ]]);
+
+        if ($resp->failed()) {
+            throw new GlpiException('GLPI rechazó la creación de la categoría: '.mb_substr($resp->body(), 0, 300));
+        }
+
+        // Refrescamos el árbol cacheado para que la nueva categoría aparezca ya.
+        Cache::forget('glpi:itilcategories');
+
+        return [
+            'id' => (int) ($resp->json('id') ?? 0),
+            'name' => $name,
+        ];
+    }
+
+    /**
+     * Mapa `completename` (en minúsculas) => id de TODAS las ITILCategory por el
+     * API legacy (apirest.php), que sí devuelve las categorías contenedoras
+     * (a diferencia del endpoint que alimenta el árbol). Se usa para resolver el
+     * id real de un nodo padre y para detectar duplicados al crear.
+     *
+     * @return array<string, int>
+     */
+    protected function allCategoriesByCompletename(): array
+    {
+        $rows = $this->legacyHttp()->get('/ITILCategory', ['range' => '0-9999'])->json() ?? [];
+
+        $map = [];
+        foreach (is_array($rows) ? $rows : [] as $r) {
+            $cn = trim((string) ($r['completename'] ?? ''));
+            $id = (int) ($r['id'] ?? 0);
+            if ($cn !== '' && $id > 0) {
+                $map[mb_strtolower($cn)] = $id;
+            }
+        }
+
+        return $map;
+    }
+
+    /**
      * Filas crudas de ITILCategory (id + completename) desde GLPI.
      *
      * @return array<int, array{id:int, completename:string}>
@@ -1135,11 +1255,27 @@ class GlpiClient
      */
     protected function treeToArray(array $nodes): array
     {
+        // Orden alfabético por nombre en cada nivel (afecta al árbol admin y al
+        // wizard). Collator para respetar acentos/ñ del español; si no está la
+        // extensión intl, caemos a una comparación case-insensitive.
+        usort($nodes, fn ($a, $b) => $this->compareNames($a->name, $b->name));
+
         return array_map(fn ($n) => [
             'id' => $n->id,
             'name' => $n->name,
             'children' => $this->treeToArray($n->children),
         ], $nodes);
+    }
+
+    /** Compara dos nombres para ordenar alfabéticamente (locale español). */
+    protected function compareNames(string $a, string $b): int
+    {
+        static $collator = null;
+        if ($collator === null) {
+            $collator = class_exists(\Collator::class) ? new \Collator('es_ES') : false;
+        }
+
+        return $collator ? $collator->compare($a, $b) : strcasecmp($a, $b);
     }
 
     /**

@@ -90,10 +90,32 @@ guardándola en `users.timezone`. Se envía a GLPI **solo** en el alta JIT del u
    (`TicketController::validation` → rebote OAuth si no hay token → `validationCallback`).
 6. **Explorador de Entra (admin):** `/admin/explorador-entra` consulta Graph por usuario (permiso de
    **aplicación** `User.Read.All`, client_credentials) para ver qué campos trae Entra. `EntraExplorerController`.
+7. **Árbol de categorías + alta (admin):** `/admin/categorias` (`CategoryTreeController` → `Admin/Categories/Tree.vue`).
+   Muestra el **mismo árbol del wizard** (`categoriesByType`) pero completo y desplegable de una vez (no paso a paso),
+   con las dos ramas (Incidente/Solicitud) en pestañas, buscador con resaltado, expandir/colapsar todo y contadores.
+   Los nodos con hijos son navegación (carpeta) y las **hojas** son las categorías reales con su `#id` de GLPI (etiqueta).
+   El controlador hace `Cache::forget('glpi:itilcategories')` para mostrar siempre el estado actual de GLPI (el wizard
+   cachea 30 min). Componente recursivo `Components/CategoryTreeNode.vue`. Sin GLPI → árbol demo.
+   **Alta de subcategorías:** botón "+" (siempre visible) en cada nodo → input inline → `POST /admin/categorias`
+   (`store`, recibe `path[]` + `branch` + `name`) → `GlpiClient::createCategory($path, $branch, $name)`, que crea la
+   ITILCategory por **legacy** (`POST /ITILCategory` con `itilcategories_id`). **Detalle importante:** el endpoint que
+   alimenta el árbol (`/Dropdowns/ITILCategory`) **NO devuelve las categorías contenedoras** (solo las hojas
+   asignables), así que los nodos intermedios llegan con `id=null` (sus nombres se derivan de los `completename` de
+   las hojas). Por eso el "+" **no puede** usar el id del nodo; en su lugar el front manda la **ruta** del nodo + la
+   **rama**, y `createCategory` reconstruye el `completename` real (insertando el nivel Incidente/Solicitud plegado) y
+   resuelve el id del padre contra el **listado legacy COMPLETO** (`allCategoriesByCompletename`, que sí incluye
+   contenedores). Valida duplicados por `completename`. Se puede agregar en **cualquier nivel** (bajo Área, carpeta u
+   hoja). Escribe en el **GLPI compartido** (lo ven los técnicos); requiere que la cuenta legacy pueda crear
+   ITILCategory (aquí super-admin). v1 = solo **agregar** (no renombrar/eliminar, ni crear Áreas de nivel superior).
 
 **Admin:** middleware `admin` (`EnsureUserIsAdmin`) + `User::isAdmin()` (local dev-login o email en
-`config/ticket.php` `admins` / env `TICKET_ADMINS`). Navbar (`AppLayout.vue`): Home + Aprobaciones para
-todos; admin: Marca, Acceso, Explorar Entra, GLPI, OAuth aprob.
+`config/ticket.php` `admins` / env `TICKET_ADMINS`). Navbar (`AppLayout.vue`): botón **recargar** (icono, `router.reload`)
++ **Aprobaciones** (con **badge** rojo de pendientes) + Home para todos; los mantenedores admin (Marca, Acceso, Explorar
+Entra, Categorías, GLPI, OAuth aprob.) van agrupados en un **menú desplegable "Administración"** (`adminLinks`) para no
+saturar la barra. El badge usa el prop global `pendingApprovalsCount` (compartido en `HandleInertiaRequests`,
+`GlpiClient::cachedPendingApprovalsCount` cacheado 60s por usuario; se invalida al responder una validación con
+`GlpiClient::forgetPendingApprovalsCount`). Las categorías del árbol/wizard se ordenan alfabéticamente por nombre en
+`GlpiClient::treeToArray` (`Collator` es_ES, con fallback a `strcasecmp`).
 
 ## Decisión cerrada — additional fields eliminados
 
@@ -115,10 +137,12 @@ un campo nativo y filtrable. Si en el futuro se necesitan campos extra, habría 
   Tailwind v4 (`@theme` en `resources/css/app.css`: `blue-600`=#2463AE, `blue-900`=#0B3456, celeste
   #E6ECF5) + fuente **Montserrat** + degradado en login + **navbar corporativa** (degradado azul, base
   redondeada, texto blanco, botón Home, iconos). Nombre configurable por `APP_NAME` ("HelpDesk Unifrutti").
-  Pendiente (opcional): versión **blanca** del logo para el navbar oscuro, esquinas más redondeadas en
-  tarjetas, acento rojo `#DA251C`.
-- Correo: GLPI encola bien las notificaciones pero el envío depende del cron `queuednotification`
-  (modo GLPI se dispara con visitas web; para envío 24/7 → cron del sistema en modo CLI).
+  **Tarjetas más redondeadas** (token `--radius-xl`=1rem en `@theme`, afecta a todos los `rounded-xl`) y
+  **acento rojo** `#DA251C` (`--color-brand-red`) como franja superior del navbar (`border-t-4 border-brand-red`).
+  Pendiente (opcional): versión **blanca** del logo para el navbar oscuro (el cliente decidió NO cambiar el logo por ahora).
+- **HECHO** — Correo/notificaciones 24/7: la acción automática `queuednotification` de GLPI se pasó a modo
+  **CLI**, disparada por un **cron del sistema** (`front/cron.php`) en el server de GLPI. Es config del server
+  GLPI (no del portal). El envío real depende además del SMTP de GLPI.
 - **HECHO** — listado por search legacy (híbrido) con **paginación real** + búsqueda + filtro de estado
   server-side (`ticketsForRequesterPaged`); ya no hay tope de 200.
 - **VERIFICADO** — el nivel 2 del árbol ITIL real es exactamente "Incidente"/"Solicitud" (24 categorías),

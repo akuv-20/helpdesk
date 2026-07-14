@@ -54,7 +54,25 @@ class HandleInertiaRequests extends Middleware
             ],
             'allowDevLogin' => app()->environment('local') && (bool) env('ALLOW_DEV_LOGIN'),
             'branding' => $this->branding(),
+            // Contador para el badge de "Aprobaciones" en el navbar (cacheado 60s).
+            'pendingApprovalsCount' => fn () => $this->pendingApprovalsCount($request),
         ];
+    }
+
+    /** Aprobaciones pendientes del usuario (0 si no hay sesión o falla GLPI). */
+    private function pendingApprovalsCount(Request $request): int
+    {
+        $user = $request->user();
+        if (! $user) {
+            return 0;
+        }
+
+        try {
+            return app(\App\Services\Glpi\GlpiClient::class)
+                ->cachedPendingApprovalsCount($user->email, $user->id);
+        } catch (\Throwable) {
+            return 0;
+        }
     }
 
     /** Imágenes de marca (logos y fondo) para el front. */
