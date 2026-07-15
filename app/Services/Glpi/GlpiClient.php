@@ -1085,10 +1085,40 @@ class GlpiClient
         return trim($out);
     }
 
-    /** Formatea una fecha ISO de GLPI de forma segura. */
+    /**
+     * Formatea una fecha de GLPI de forma segura, convirtiéndola a la zona
+     * horaria del usuario que está viendo.
+     *
+     * GLPI devuelve las fechas en la zona de la sesión API (la cuenta de
+     * servicio), no en la de quien mira: por eso las interpretamos desde
+     * `glpi.timezone` y las pasamos a `users.timezone`. Si el usuario no tiene
+     * zona (o no hay sesión), se muestran tal cual llegan.
+     */
     protected function fmtDate(?string $date, string $format = 'd-m-Y'): ?string
     {
-        return $date ? rescue(fn () => \Illuminate\Support\Carbon::parse($date)->format($format), $date, false) : null;
+        if (! $date) {
+            return null;
+        }
+
+        return rescue(
+            fn () => \Illuminate\Support\Carbon::parse($date, $this->sourceTimezone())
+                ->setTimezone($this->displayTimezone())
+                ->format($format),
+            $date,
+            false
+        );
+    }
+
+    /** Zona en la que GLPI entrega las fechas por API (servidor/cuenta de servicio). */
+    protected function sourceTimezone(): string
+    {
+        return $this->config['timezone'] ?: config('app.timezone');
+    }
+
+    /** Zona del usuario autenticado; si no tiene, no se convierte nada. */
+    protected function displayTimezone(): string
+    {
+        return auth()->user()?->timezone ?: $this->sourceTimezone();
     }
 
     /**
@@ -1782,14 +1812,14 @@ class GlpiClient
                 $updated = $row['date_mod'] ?? $row['19'] ?? null;
 
                 $title = $row['name'] ?? $row['1'] ?? '(sin título)';
-                $fmt = fn ($d) => $d ? rescue(fn () => \Illuminate\Support\Carbon::parse($d)->format('d-m-Y'), $d, false) : null;
 
                 return [
                     'id' => $row['id'] ?? $row['2'] ?? null,
                     'title' => $title,
                     'status' => $status !== null ? (int) $status : null,
-                    'opened_at' => $fmt($date),
-                    'updated_at' => $fmt($updated),
+                    // fmtDate convierte a la zona horaria del usuario que mira.
+                    'opened_at' => $this->fmtDate($date),
+                    'updated_at' => $this->fmtDate($updated),
                     // Texto para el buscador del front: nombre + descripción (plano).
                     // Legacy trae la descripción en la clave '21'.
                     'search' => mb_strtolower($title.' '.mb_substr($this->plainText($row['content'] ?? $row['21'] ?? ''), 0, 1000)),

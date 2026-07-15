@@ -30,6 +30,16 @@ return [
     'verify' => env('GLPI_VERIFY_TLS', true),
 
     /*
+    | Zona horaria en la que la API de GLPI DEVUELVE las fechas. GLPI convierte
+    | las horas según la zona del usuario de la sesión; como el portal consulta
+    | con la cuenta de servicio, las fechas llegan en la zona de esa cuenta (o,
+    | si no tiene, en la del servidor de GLPI). El portal las reinterpreta desde
+    | aquí y las convierte a la zona de cada usuario (`users.timezone`) al
+    | mostrarlas. Si las horas se ven corridas, este es el valor a ajustar.
+    */
+    'timezone' => env('GLPI_TIMEZONE', 'America/Santiago'),
+
+    /*
     | Driver OAuth2 (API v2). Confirmado contra el Swagger de la instancia
     | (GLPI High-Level REST API 2.3.0): los grants disponibles son
     | "authorizationCode" y "password" (NO existe client_credentials).

@@ -34,6 +34,13 @@ se toca. No crea al usuario si no existe (eso lo hace el alta JIT del primer tic
 (swallow + log) y cachea el chequeo 7 días por usuario (`glpi:tz_checked:{id}`) para no consultar GLPI en cada
 inicio de sesión.
 
+**Fechas mostradas (conversión de zona):** GLPI entrega las fechas en la zona de la **sesión API** (la cuenta de
+servicio), no en la del usuario que mira. Por eso `GlpiClient::fmtDate()` las interpreta desde
+**`config glpi.timezone`** (env `GLPI_TIMEZONE`, default `America/Santiago` = zona del servidor GLPI / cuenta de
+servicio) y las convierte a **`users.timezone`** del usuario autenticado (`displayTimezone()`); si el usuario no
+tiene zona o no hay sesión, se muestran tal cual. Todas las fechas de la UI (listado, detalle, timeline,
+aprobaciones) pasan por `fmtDate`. **Si las horas se ven corridas, el valor a ajustar es `GLPI_TIMEZONE`.**
+
 ## Hallazgos del Swagger real (GLPI High-Level REST API 2.3.0)
 
 - API v2 activa (`/api.php/v2/` → 401). Legacy `apirest.php` también activa (plan B).
