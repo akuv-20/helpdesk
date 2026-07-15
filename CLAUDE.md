@@ -27,7 +27,12 @@ luego entre por SAML, GLPI reutilice ese registro (no duplique).
 
 **Zona horaria:** en el login se pide el campo `country` a Graph (`config services.microsoft.fields`) y
 `EntraController::timezoneFromCountry()` la deriva (CL/Chile→America/Santiago, PE/Perú→America/Lima),
-guardándola en `users.timezone`. Se envía a GLPI **solo** en el alta JIT del usuario (no en cada ticket).
+guardándola en `users.timezone` (se actualiza en cada login). Hacia GLPI va por dos vías: en el **alta JIT**
+(`legacyCreateUser`, solo usuarios nuevos) y en **cada login** vía `GlpiClient::ensureUserTimezone()`, que la
+completa **solo si el usuario en GLPI la tiene vacía** (los creados por SAML no la traen); si ya tiene una, no
+se toca. No crea al usuario si no existe (eso lo hace el alta JIT del primer ticket), nunca bloquea el login
+(swallow + log) y cachea el chequeo 7 días por usuario (`glpi:tz_checked:{id}`) para no consultar GLPI en cada
+inicio de sesión.
 
 ## Hallazgos del Swagger real (GLPI High-Level REST API 2.3.0)
 

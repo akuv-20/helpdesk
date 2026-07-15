@@ -1397,6 +1397,67 @@ class GlpiClient
     }
 
     /**
+     * Completa la zona horaria del usuario EN GLPI si aún no tiene ninguna.
+     * Se llama en cada login: los usuarios creados por SAML (no por el alta JIT
+     * del portal) no traen timezone, y GLPI muestra sus horas mal.
+     *
+     * Solo escribe si el campo está VACÍO: si el usuario ya tiene una zona
+     * (puesta por él o por un técnico), no se toca. Si el usuario todavía no
+     * existe en GLPI, no se crea: ya se fijará en el alta JIT del primer ticket.
+     *
+     * Nunca lanza excepción ni bloquea el login: si GLPI falla, solo se registra.
+     * Cachea el resultado para no consultar GLPI en cada inicio de sesión.
+     */
+    public function ensureUserTimezone(string $email, ?string $timezone): void
+    {
+        if (blank($timezone) || ! $this->isConfigured() || ! $this->hasLegacyTokens()) {
+            return;
+        }
+
+        try {
+            $userId = $this->findUserId($email);
+            if ($userId === null) {
+                return; // aún no existe en GLPI (lo creará el primer ticket)
+            }
+
+            // Ya verificado hace poco: no volvemos a preguntar en cada login.
+            $cacheKey = "glpi:tz_checked:{$userId}";
+            if (Cache::has($cacheKey)) {
+                return;
+            }
+
+            $user = $this->legacyHttp()->get("/User/{$userId}")->json();
+            $current = is_array($user) ? trim((string) ($user['timezone'] ?? '')) : '';
+
+            if ($current !== '') {
+                // Ya tiene zona horaria: no hacemos nada.
+                Cache::put($cacheKey, true, now()->addDays(7));
+
+                return;
+            }
+
+            $resp = $this->legacyHttp()->put("/User/{$userId}", ['input' => [
+                'id' => $userId,
+                'timezone' => $timezone,
+            ]]);
+
+            if ($resp->successful()) {
+                Cache::put($cacheKey, true, now()->addDays(7));
+            } else {
+                // Suele fallar si las zonas horarias no están habilitadas en la BD de GLPI.
+                Log::warning('GLPI: no se pudo fijar la zona horaria del usuario', [
+                    'users_id' => $userId, 'timezone' => $timezone,
+                    'status' => $resp->status(), 'body' => mb_substr($resp->body(), 0, 300),
+                ]);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('GLPI: excepción al fijar la zona horaria del usuario', [
+                'email' => $email, 'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
      * Crea el usuario en GLPI vía API legacy y le vincula su correo. Devuelve el
      * id creado, o null si GLPI rechazó el alta. No lanza excepción: si el alta
      * falla, createTicket ya reporta un error claro al usuario.

@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use App\Services\Auth\EntraConfig;
+use App\Services\Glpi\GlpiClient;
 use App\Services\Settings\Settings;
 use Illuminate\Support\Facades\Auth;
 use Laravel\Socialite\Facades\Socialite;
@@ -75,6 +76,11 @@ class EntraController extends Controller
         }
 
         $user = User::updateOrCreate(['email' => $email], $attributes);
+
+        // Completa la zona horaria del usuario EN GLPI si la tiene vacía (los
+        // creados por SAML no la traen; el alta JIT solo cubre a los nuevos).
+        // Si ya tiene una, no se toca. Nunca bloquea el login.
+        app(GlpiClient::class)->ensureUserTimezone($user->email, $user->timezone);
 
         Auth::login($user, remember: true);
 
