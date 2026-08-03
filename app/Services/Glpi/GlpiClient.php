@@ -415,6 +415,41 @@ class GlpiClient
         return $this->resolveUserName((int) ($actor['id'] ?? 0)) ?? ($actor['name'] ?? null);
     }
 
+    /**
+     * Mapa documents_id => users_id (autor del vínculo) de los adjuntos de un
+     * ticket, por el API legacy. El API v2 no expone quién subió cada documento
+     * en el timeline, así que resolvemos el autor con esto y no cae al fallback
+     * genérico ("Soporte"). Devuelve [] si no hay tokens legacy o falla.
+     *
+     * @return array<int, int>
+     */
+    protected function documentUploaderIds(int $ticketId): array
+    {
+        if ($ticketId <= 0 || ! $this->hasLegacyTokens()) {
+            return [];
+        }
+
+        try {
+            $rows = $this->legacyHttp()->get("/Ticket/{$ticketId}/Document_Item")->json() ?? [];
+            $map = [];
+            foreach ((is_array($rows) ? $rows : []) as $row) {
+                $docId = (int) ($row['documents_id'] ?? 0);
+                $uid = (int) ($row['users_id'] ?? 0);
+                if ($docId > 0 && $uid > 0) {
+                    $map[$docId] = $uid;
+                }
+            }
+
+            return $map;
+        } catch (\Throwable $e) {
+            Log::warning('GLPI: no se pudo resolver el autor de los adjuntos', [
+                'ticket' => $ticketId, 'error' => $e->getMessage(),
+            ]);
+
+            return [];
+        }
+    }
+
     /** ¿El usuario es (o fue) validador en alguna validación del ticket? */
     protected function isValidatorOnTicket(array $timeline, int $userId): bool
     {
@@ -914,7 +949,14 @@ class GlpiClient
             ->mapWithKeys(fn ($m) => [(int) ($m['id'] ?? 0) => $m['display_name'] ?? $m['name'] ?? null]);
         $authorOf = fn ($u) => $people[(int) ($u['id'] ?? 0)] ?? ($u['name'] ?? null);
 
-        $entries = collect($items)->map(function ($entry) use ($ticketId, $inlineDocIds, $authorOf) {
+        // El API v2 NO trae quién subió cada documento en el timeline
+        // (item.user = null), así que sin esto el adjunto sale como "Soporte".
+        // Resolvemos el autor por legacy (Document_Item.users_id) y su nombre
+        // desde el team o, si no está, por una consulta de usuario cacheada.
+        $docUploaders = $this->documentUploaderIds($ticketId);
+        $resolveName = fn (int $uid) => $people[$uid] ?? $this->resolveUserName($uid);
+
+        $entries = collect($items)->map(function ($entry) use ($ticketId, $inlineDocIds, $authorOf, $docUploaders, $resolveName) {
             $type = $entry['type'] ?? null;
             $item = $entry['item'] ?? [];
 
@@ -942,10 +984,12 @@ class GlpiClient
                     return null; // imagen inline: ya se ve dentro del texto
                 }
 
+                $uploaderId = (int) ($docUploaders[$docId] ?? 0);
+
                 return [
                     '_date' => $item['date_creation'] ?? $item['date'] ?? '',
                     'kind' => 'document',
-                    'author' => $authorOf($item['user'] ?? []),
+                    'author' => $uploaderId ? $resolveName($uploaderId) : $authorOf($item['user'] ?? []),
                     'content' => null,
                     'file' => $item['document']['name'] ?? 'archivo',
                     'doc_id' => $docId,
