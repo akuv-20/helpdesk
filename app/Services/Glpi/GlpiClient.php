@@ -1657,11 +1657,11 @@ class GlpiClient
      * El API v2 no permite vincular documentos a tickets, por eso este paso
      * usa siempre el driver legacy (necesita App-Token + User-Token).
      *
-     * Se declara `users_id` = autor real del documento: sin él, GLPI atribuye
-     * el documento al usuario de la sesión API (la cuenta de servicio) y en el
-     * timeline el adjunto aparece "creado por Usuario de Servicio". Pasando el
-     * id de la persona (solicitante) queda a su nombre, igual que el ticket y
-     * los seguimientos. Aplica tanto al adjuntar al crear como en un seguimiento.
+     * Tras subir, corrige el autor (`users_id`) al solicitante con un PUT: GLPI
+     * fuerza el autor del documento al usuario de la sesión API (la cuenta de
+     * servicio) e ignora el `users_id` que se le pase al crear, así que sin este
+     * paso el adjunto sale "creado por Usuario de Servicio" en el timeline.
+     * Aplica tanto al adjuntar al crear el ticket como en un seguimiento.
      */
     protected function uploadDocument(int $ticketId, \Illuminate\Http\UploadedFile $file, ?int $userId = null): void
     {
@@ -1676,17 +1676,12 @@ class GlpiClient
         try {
             // El manifest debe declarar el nombre del archivo y el ítem al que
             // se vincula; la parte binaria va como filename[0].
-            $input = [
+            $manifest = json_encode(['input' => [
                 'name' => $name,
                 '_filename' => [$name],
                 'itemtype' => 'Ticket',
                 'items_id' => $ticketId,
-            ];
-            if ($userId) {
-                // Autor del documento = la persona, no la cuenta de servicio.
-                $input['users_id'] = $userId;
-            }
-            $manifest = json_encode(['input' => $input]);
+            ]]);
 
             $resp = $this->legacyHttp()
                 ->attach('filename[0]', file_get_contents($file->getRealPath()), $name)
@@ -1697,10 +1692,40 @@ class GlpiClient
                     'ticket' => $ticketId, 'file' => $name,
                     'status' => $resp->status(), 'body' => mb_substr($resp->body(), 0, 300),
                 ]);
+
+                return;
+            }
+
+            // GLPI fija users_id del documento con el usuario de la sesión API
+            // (la cuenta de servicio) e IGNORA el users_id del manifest, así que
+            // el adjunto sale "creado por Usuario de Servicio". Lo corregimos con
+            // un PUT posterior al autor real (verificado: el update sí lo respeta).
+            $docId = (int) ($resp->json('id') ?? 0);
+            if ($userId && $docId > 0) {
+                $this->fixDocumentAuthor($docId, $userId);
             }
         } catch (\Throwable $e) {
             Log::warning('GLPI: excepción al adjuntar archivo', [
                 'ticket' => $ticketId, 'file' => $name, 'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Fija el autor (`users_id`) de un documento ya subido al usuario real, vía
+     * PUT legacy. Necesario porque GLPI fuerza el autor a la cuenta de servicio
+     * al crear. No lanza excepción: es cosmético (solo cambia el "creado por").
+     */
+    protected function fixDocumentAuthor(int $documentId, int $userId): void
+    {
+        try {
+            $this->legacyHttp()->put("/Document/{$documentId}", ['input' => [
+                'id' => $documentId,
+                'users_id' => $userId,
+            ]]);
+        } catch (\Throwable $e) {
+            Log::warning('GLPI: no se pudo fijar el autor del documento', [
+                'document' => $documentId, 'user' => $userId, 'error' => $e->getMessage(),
             ]);
         }
     }
