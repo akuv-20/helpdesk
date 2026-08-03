@@ -65,7 +65,7 @@ function logout() {
 
 <template>
     <div class="min-h-full">
-        <header class="rounded-b-3xl border-t-4 border-brand-red bg-[linear-gradient(265deg,#2463AF_0%,#0B3456_100%)] shadow-lg">
+        <header class="rounded-b-3xl border-t-2 border-brand-red bg-[linear-gradient(265deg,#2463AF_0%,#0B3456_100%)] shadow-lg">
             <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
                 <div class="flex items-center gap-3">
                     <Link href="/inicio" class="flex items-center gap-2 font-semibold text-white">
