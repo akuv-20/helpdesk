@@ -269,9 +269,9 @@ class GlpiClient
             // solicitante con un update posterior.
             $this->fixTicketRecipient((int) $ticketId, $userId);
 
-            // Adjuntos normales (no inline) tras crear.
+            // Adjuntos normales (no inline) tras crear, a nombre del solicitante.
             foreach ($data['attachments'] ?? [] as $file) {
-                $this->uploadDocument($ticketId, $file);
+                $this->uploadDocument($ticketId, $file, $userId);
             }
         }
 
@@ -755,7 +755,7 @@ class GlpiClient
         }
 
         foreach ($attachments as $file) {
-            $this->uploadDocument($ticketId, $file);
+            $this->uploadDocument($ticketId, $file, $userId);
         }
     }
 
@@ -1656,8 +1656,14 @@ class GlpiClient
      * Sube un archivo y lo vincula al ticket vía el API legacy (apirest.php).
      * El API v2 no permite vincular documentos a tickets, por eso este paso
      * usa siempre el driver legacy (necesita App-Token + User-Token).
+     *
+     * Se declara `users_id` = autor real del documento: sin él, GLPI atribuye
+     * el documento al usuario de la sesión API (la cuenta de servicio) y en el
+     * timeline el adjunto aparece "creado por Usuario de Servicio". Pasando el
+     * id de la persona (solicitante) queda a su nombre, igual que el ticket y
+     * los seguimientos. Aplica tanto al adjuntar al crear como en un seguimiento.
      */
-    protected function uploadDocument(int $ticketId, \Illuminate\Http\UploadedFile $file): void
+    protected function uploadDocument(int $ticketId, \Illuminate\Http\UploadedFile $file, ?int $userId = null): void
     {
         if (blank($this->config['legacy']['app_token'] ?? null) || blank($this->config['legacy']['user_token'] ?? null)) {
             Log::warning('GLPI: adjuntos omitidos, faltan App-Token/User-Token legacy', ['ticket' => $ticketId]);
@@ -1670,12 +1676,17 @@ class GlpiClient
         try {
             // El manifest debe declarar el nombre del archivo y el ítem al que
             // se vincula; la parte binaria va como filename[0].
-            $manifest = json_encode(['input' => [
+            $input = [
                 'name' => $name,
                 '_filename' => [$name],
                 'itemtype' => 'Ticket',
                 'items_id' => $ticketId,
-            ]]);
+            ];
+            if ($userId) {
+                // Autor del documento = la persona, no la cuenta de servicio.
+                $input['users_id'] = $userId;
+            }
+            $manifest = json_encode(['input' => $input]);
 
             $resp = $this->legacyHttp()
                 ->attach('filename[0]', file_get_contents($file->getRealPath()), $name)
