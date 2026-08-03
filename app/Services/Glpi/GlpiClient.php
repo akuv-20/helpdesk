@@ -1657,9 +1657,9 @@ class GlpiClient
      * El API v2 no permite vincular documentos a tickets, por eso este paso
      * usa siempre el driver legacy (necesita App-Token + User-Token).
      *
-     * Tras subir, corrige el autor (`users_id`) al solicitante con un PUT: GLPI
-     * fuerza el autor del documento al usuario de la sesión API (la cuenta de
-     * servicio) e ignora el `users_id` que se le pase al crear, así que sin este
+     * Tras subir, corrige el autor al solicitante con un PUT (ver
+     * fixDocumentAuthor): GLPI fuerza el autor al usuario de la sesión API (la
+     * cuenta de servicio) e ignora el `users_id` del manifest, así que sin este
      * paso el adjunto sale "creado por Usuario de Servicio" en el timeline.
      * Aplica tanto al adjuntar al crear el ticket como en un seguimiento.
      */
@@ -1696,13 +1696,13 @@ class GlpiClient
                 return;
             }
 
-            // GLPI fija users_id del documento con el usuario de la sesión API
-            // (la cuenta de servicio) e IGNORA el users_id del manifest, así que
-            // el adjunto sale "creado por Usuario de Servicio". Lo corregimos con
-            // un PUT posterior al autor real (verificado: el update sí lo respeta).
+            // GLPI fija el autor con el usuario de la sesión API (la cuenta de
+            // servicio) e IGNORA el users_id del manifest, así que el adjunto
+            // sale "creado por Usuario de Servicio". Lo corregimos con un PUT
+            // posterior al autor real (verificado: el update sí lo respeta).
             $docId = (int) ($resp->json('id') ?? 0);
             if ($userId && $docId > 0) {
-                $this->fixDocumentAuthor($docId, $userId);
+                $this->fixDocumentAuthor($docId, $ticketId, $userId);
             }
         } catch (\Throwable $e) {
             Log::warning('GLPI: excepción al adjuntar archivo', [
@@ -1712,20 +1712,43 @@ class GlpiClient
     }
 
     /**
-     * Fija el autor (`users_id`) de un documento ya subido al usuario real, vía
-     * PUT legacy. Necesario porque GLPI fuerza el autor a la cuenta de servicio
-     * al crear. No lanza excepción: es cosmético (solo cambia el "creado por").
+     * Corrige el autor de un adjunto ya subido al usuario real (solicitante),
+     * porque GLPI lo crea a nombre de la cuenta de servicio de la sesión API.
+     *
+     * Hay que tocar DOS registros:
+     *  - `Document.users_id`: autor del documento en sí.
+     *  - `Document_Item.users_id`: el vínculo documento↔ticket. **Este es el que
+     *    GLPI muestra como "creado por" en el timeline** (verificado en la
+     *    instancia real), por eso es el imprescindible.
+     *
+     * No lanza excepción: es cosmético (solo cambia el "creado por").
      */
-    protected function fixDocumentAuthor(int $documentId, int $userId): void
+    protected function fixDocumentAuthor(int $documentId, int $ticketId, int $userId): void
     {
         try {
+            // Autor del documento en sí.
             $this->legacyHttp()->put("/Document/{$documentId}", ['input' => [
                 'id' => $documentId,
                 'users_id' => $userId,
             ]]);
+
+            // Autor del vínculo con el ticket (lo que se ve en el timeline).
+            $links = $this->legacyHttp()->get("/Document/{$documentId}/Document_Item")->json() ?? [];
+            foreach ((is_array($links) ? $links : []) as $link) {
+                if (($link['itemtype'] ?? '') !== 'Ticket' || (int) ($link['items_id'] ?? 0) !== $ticketId) {
+                    continue;
+                }
+                $linkId = (int) ($link['id'] ?? 0);
+                if ($linkId > 0) {
+                    $this->legacyHttp()->put("/Document_Item/{$linkId}", ['input' => [
+                        'id' => $linkId,
+                        'users_id' => $userId,
+                    ]]);
+                }
+            }
         } catch (\Throwable $e) {
             Log::warning('GLPI: no se pudo fijar el autor del documento', [
-                'document' => $documentId, 'user' => $userId, 'error' => $e->getMessage(),
+                'document' => $documentId, 'ticket' => $ticketId, 'user' => $userId, 'error' => $e->getMessage(),
             ]);
         }
     }
