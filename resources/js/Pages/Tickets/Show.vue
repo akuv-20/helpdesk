@@ -1,6 +1,6 @@
 <script setup>
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import AppLayout from '../../Layouts/AppLayout.vue';
 import RichInput from '../../Components/RichInput.vue';
 import EntityChip from '../../Components/EntityChip.vue';
@@ -77,9 +77,14 @@ function respondSolution(action) {
     });
 }
 
-// Previsualización de adjuntos: imágenes y PDF se ven en un modal (con opción de
-// descargar); el resto de tipos se descargan directo (no hay vista previa nativa).
+// Previsualización de adjuntos: imágenes, PDF y Word (.docx) se ven en un modal
+// (con opción de descargar); el resto de tipos se descargan directo. El navegador
+// solo trae visor nativo para imagen/PDF; el .docx se renderiza en el cliente con
+// docx-preview (carga diferida), leyendo el archivo desde nuestro propio endpoint
+// autenticado (sin mandar el documento a ningún servicio externo).
 const preview = ref(null); // { docId, file, kind }
+const docxContainer = ref(null);
+const docxState = ref('idle'); // idle | loading | ready | error
 
 const IMAGE_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
 
@@ -87,6 +92,7 @@ function fileKind(name) {
     const ext = (name ?? '').split('.').pop()?.toLowerCase() ?? '';
     if (IMAGE_EXT.includes(ext)) return 'image';
     if (ext === 'pdf') return 'pdf';
+    if (ext === 'docx') return 'docx';
     return 'other';
 }
 function isPreviewable(name) {
@@ -98,11 +104,35 @@ function downloadHref(docId) {
 function viewHref(docId) {
     return `/tickets/${props.ticket.id}/adjuntos/${docId}?view=1`;
 }
-function openPreview(entry) {
+async function openPreview(entry) {
     preview.value = { docId: entry.doc_id, file: entry.file, kind: fileKind(entry.file) };
+    if (preview.value.kind === 'docx') {
+        await nextTick();
+        renderDocx(preview.value.docId);
+    }
 }
 function closePreview() {
     preview.value = null;
+    docxState.value = 'idle';
+}
+
+// Renderiza un .docx dentro del modal. docx-preview y su parser se cargan solo
+// aquí (import dinámico → chunk aparte), así no pesan en el bundle principal.
+async function renderDocx(docId) {
+    docxState.value = 'loading';
+    try {
+        const [{ renderAsync }, resp] = await Promise.all([
+            import('docx-preview'),
+            fetch(viewHref(docId), { credentials: 'same-origin' }),
+        ]);
+        if (!resp.ok) throw new Error('descarga fallida');
+        const blob = await resp.blob();
+        if (docxContainer.value) docxContainer.value.innerHTML = '';
+        await renderAsync(blob, docxContainer.value, undefined, { inWrapper: true });
+        docxState.value = 'ready';
+    } catch (e) {
+        docxState.value = 'error';
+    }
 }
 
 function onKeydown(e) {
@@ -415,11 +445,26 @@ function respondValidation(action) {
                         class="m-auto max-h-full max-w-full object-contain"
                     />
                     <iframe
-                        v-else
+                        v-else-if="preview.kind === 'pdf'"
                         :src="viewHref(preview.docId)"
                         :title="preview.file"
                         class="h-full w-full"
                     ></iframe>
+                    <!-- Word (.docx): render en el cliente con docx-preview -->
+                    <div v-else-if="preview.kind === 'docx'" class="relative h-full w-full overflow-auto bg-slate-100">
+                        <div v-if="docxState === 'loading'" class="grid h-full place-items-center text-sm text-slate-500">
+                            Cargando documento…
+                        </div>
+                        <div v-else-if="docxState === 'error'" class="grid h-full place-items-center px-6 text-center text-sm text-slate-500">
+                            <div>
+                                <p>No se pudo previsualizar este documento.</p>
+                                <a :href="downloadHref(preview.docId)" class="mt-2 inline-block font-medium text-blue-600 hover:underline">
+                                    Descargar archivo
+                                </a>
+                            </div>
+                        </div>
+                        <div v-show="docxState === 'ready'" ref="docxContainer" class="mx-auto py-4"></div>
+                    </div>
                 </div>
             </div>
         </Teleport>
