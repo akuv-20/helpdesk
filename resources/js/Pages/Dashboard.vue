@@ -73,19 +73,19 @@ watch(statusFilter, () => reload(1));
 </script>
 
 <template>
-    <Head title="Mis solicitudes" />
+    <Head title="Mis tickets" />
 
     <AppLayout>
         <div class="mb-6 flex items-center justify-between">
             <div>
-                <h1 class="text-xl font-semibold text-slate-900">Mis solicitudes</h1>
+                <h1 class="text-xl font-semibold text-slate-900">Mis tickets</h1>
                 <p class="text-sm text-slate-500">Aquí ves el estado de todo lo que has reportado.</p>
             </div>
             <Link
                 href="/tickets/nuevo"
                 class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
             >
-                Nueva solicitud
+                Nuevo ticket
             </Link>
         </div>
 
@@ -93,7 +93,7 @@ watch(statusFilter, () => reload(1));
             v-if="!glpiConfigured"
             class="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
         >
-            La conexión con GLPI todavía no está configurada, por lo que no se muestran solicitudes reales.
+            La conexión con GLPI todavía no está configurada, por lo que no se muestran tickets reales.
         </div>
 
         <!-- Aprobaciones pendientes: validaciones que un técnico pidió responder -->
@@ -181,7 +181,7 @@ watch(statusFilter, () => reload(1));
                 >
                     ← Anterior
                 </button>
-                <span class="text-slate-500">Página {{ pagination.page }} de {{ pagination.last_page }} · {{ pagination.total }} solicitudes</span>
+                <span class="text-slate-500">Página {{ pagination.page }} de {{ pagination.last_page }} · {{ pagination.total }} tickets</span>
                 <button
                     type="button"
                     :disabled="!canNext"
@@ -194,9 +194,9 @@ watch(statusFilter, () => reload(1));
         </template>
 
         <div v-else class="grid place-items-center rounded-xl border border-dashed border-slate-300 bg-white px-4 py-16 text-center">
-            <p class="text-slate-500">Aún no tienes solicitudes.</p>
+            <p class="text-slate-500">Aún no tienes tickets.</p>
             <Link href="/tickets/nuevo" class="mt-2 text-sm font-medium text-blue-600 hover:underline">
-                Crear la primera
+                Crear el primero
             </Link>
         </div>
 
@@ -212,15 +212,15 @@ watch(statusFilter, () => reload(1));
                         <div class="mx-auto grid h-14 w-14 place-items-center rounded-full bg-green-100 text-3xl text-green-600">
                             ✓
                         </div>
-                        <h2 class="mt-4 text-lg font-semibold text-slate-900">¡Solicitud creada!</h2>
-                        <p class="mt-1 text-sm text-slate-500">Tu solicitud quedó registrada con el número:</p>
+                        <h2 class="mt-4 text-lg font-semibold text-slate-900">¡Ticket creado!</h2>
+                        <p class="mt-1 text-sm text-slate-500">Tu ticket quedó registrado con el número:</p>
 
                         <div class="my-4 rounded-xl border border-slate-200 bg-slate-50 py-4">
                             <span class="text-3xl font-bold tracking-tight text-blue-600">#{{ createdTicket }}</span>
                         </div>
 
                         <p class="text-sm text-slate-600">
-                            <strong>Toma nota de este número.</strong> Te servirá para hacer seguimiento a tu solicitud.
+                            <strong>Toma nota de este número.</strong> Te servirá para hacer seguimiento a tu ticket.
                         </p>
 
                         <div class="mt-6 flex gap-3">
@@ -228,7 +228,7 @@ watch(statusFilter, () => reload(1));
                                 :href="`/tickets/${createdTicket}`"
                                 class="flex-1 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
                             >
-                                Ver solicitud
+                                Ver ticket
                             </Link>
                             <button
                                 type="button"

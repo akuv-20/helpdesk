@@ -44,7 +44,7 @@ function devLogin() {
                     ●
                 </div>
                 <h1 class="text-2xl font-semibold text-slate-900">{{ appName }}</h1>
-                <p class="mt-1 text-sm text-slate-500">Ingresa para crear y seguir tus solicitudes.</p>
+                <p class="mt-1 text-sm text-slate-500">Ingresa para crear y seguir tus tickets.</p>
             </div>
 
             <div

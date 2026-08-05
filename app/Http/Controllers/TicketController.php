@@ -247,6 +247,6 @@ class TicketController extends Controller
         // confirmación en el dashboard. Si no (caso raro), mensaje simple.
         return $number
             ? redirect()->route('dashboard')->with('createdTicket', $number)
-            : redirect()->route('dashboard')->with('success', 'Tu solicitud fue creada. Te avisaremos cuando haya novedades.');
+            : redirect()->route('dashboard')->with('success', 'Tu ticket fue creado. Te avisaremos cuando haya novedades.');
     }
 }

@@ -99,12 +99,12 @@ const typeLabel = (v) => props.types.find((t) => t.value === v)?.label ?? '';
 </script>
 
 <template>
-    <Head title="Nueva solicitud" />
+    <Head title="Nuevo ticket" />
 
     <AppLayout>
         <div class="mb-6">
             <Link href="/inicio" class="text-sm text-slate-500 hover:underline">← Volver</Link>
-            <h1 class="mt-2 text-xl font-semibold text-slate-900">Nueva solicitud</h1>
+            <h1 class="mt-2 text-xl font-semibold text-slate-900">Nuevo ticket</h1>
             <p class="text-sm text-slate-500">Te guiamos en unos pocos pasos.</p>
         </div>
 
@@ -190,7 +190,7 @@ const typeLabel = (v) => props.types.find((t) => t.value === v)?.label ?? '';
                 <input
                     v-model="form.subject"
                     type="text"
-                    placeholder="Resumen breve de tu solicitud"
+                    placeholder="Resumen breve de tu ticket"
                     class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none"
                 />
                 <p v-if="form.errors.subject" class="mt-1 text-xs text-red-600">{{ form.errors.subject }}</p>
@@ -238,7 +238,7 @@ const typeLabel = (v) => props.types.find((t) => t.value === v)?.label ?? '';
                     :disabled="form.processing"
                     class="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-60"
                 >
-                    {{ form.processing ? 'Enviando…' : 'Enviar solicitud' }}
+                    {{ form.processing ? 'Enviando…' : 'Enviar ticket' }}
                 </button>
             </div>
         </form>

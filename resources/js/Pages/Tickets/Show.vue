@@ -155,11 +155,11 @@ function respondValidation(action) {
 </script>
 
 <template>
-    <Head :title="`Solicitud #${ticket.id}`" />
+    <Head :title="`Ticket #${ticket.id}`" />
 
     <AppLayout>
         <div class="mb-4">
-            <Link href="/inicio" class="text-sm text-slate-500 hover:underline">← Mis solicitudes</Link>
+            <Link href="/inicio" class="text-sm text-slate-500 hover:underline">← Mis tickets</Link>
         </div>
 
         <!-- Encabezado -->
@@ -255,7 +255,7 @@ function respondValidation(action) {
                     v-if="ticket.status === 6"
                     class="rounded-xl border border-slate-200 bg-white px-4 py-3 text-center text-sm text-slate-500"
                 >
-                    Este ticket está cerrado. Si necesitas algo más, crea una nueva solicitud.
+                    Este ticket está cerrado. Si necesitas algo más, crea un nuevo ticket.
                 </div>
 
                 <!-- Responder (solo tickets abiertos) -->
@@ -321,7 +321,7 @@ function respondValidation(action) {
                                 <EntityChip :label="entry.author || 'Soporte'" variant="user" />
                                 <span v-if="entry.kind === 'solution'" class="font-medium text-green-700">· Solución</span>
                                 <span v-else-if="entry.kind === 'rejection'" class="font-medium text-red-600">· Rechazo</span>
-                                <span v-else-if="entry.kind === 'description'" class="text-slate-400">· Solicitud inicial</span>
+                                <span v-else-if="entry.kind === 'description'" class="text-slate-400">· Mensaje inicial</span>
                                 <span v-else-if="entry.kind === 'validation_request'" class="font-medium text-indigo-700">· Solicitud de aprobación</span>
                                 <span v-else-if="entry.kind === 'validation_approved'" class="font-medium text-green-700">· Aprobación concedida</span>
                                 <span v-else-if="entry.kind === 'validation_rejected'" class="font-medium text-red-600">· Aprobación rechazada</span>
