@@ -32,8 +32,18 @@ const statusColors = {
     5: 'bg-blue-100 text-blue-700',
     6: 'bg-slate-200 text-slate-700',
 };
+// Color de la franja izquierda por estado (mismo criterio que el pill).
+const statusStripes = {
+    1: 'border-l-green-500',
+    2: 'border-l-amber-500',
+    3: 'border-l-amber-500',
+    4: 'border-l-slate-400',
+    5: 'border-l-blue-500',
+    6: 'border-l-slate-400',
+};
 const statusLabel = (s) => statusLabels[s] ?? 'En proceso';
 const statusColor = (s) => statusColors[s] ?? 'bg-slate-100 text-slate-600';
+const statusStripe = (s) => statusStripes[s] ?? 'border-l-slate-400';
 
 // Controles (inicializados desde el servidor). Búsqueda/filtro/paginación
 // se resuelven server-side vía Inertia.
@@ -139,13 +149,17 @@ watch(statusFilter, () => reload(1));
                     v-for="ticket in tickets"
                     :key="ticket.id"
                     :href="`/tickets/${ticket.id}`"
-                    class="flex items-center justify-between gap-4 px-4 py-3 transition hover:bg-slate-100"
+                    class="flex items-center gap-4 border-l-4 px-4 py-3 transition hover:bg-slate-100"
+                    :class="statusStripe(ticket.status)"
                 >
-                    <div class="min-w-0">
+                    <!-- Rail de número: el dato que más se usa para dar seguimiento -->
+                    <div class="flex min-w-[64px] flex-col items-center justify-center rounded-lg bg-blue-50 px-2.5 py-1.5">
+                        <span class="text-[10px] font-semibold tracking-wider text-blue-500">TICKET</span>
+                        <span class="text-xl font-bold leading-none text-blue-900 tabular-nums">{{ ticket.id }}</span>
+                    </div>
+                    <div class="min-w-0 flex-1">
                         <p class="truncate font-medium text-slate-900">{{ ticket.title }}</p>
-                        <p class="text-xs text-slate-400">
-                            #{{ ticket.id }} · Actualizado {{ ticket.updated_at ?? ticket.opened_at }}
-                        </p>
+                        <p class="text-xs text-slate-400">Actualizado {{ ticket.updated_at ?? ticket.opened_at }}</p>
                     </div>
                     <span class="shrink-0 rounded-full px-3 py-1 text-xs font-medium" :class="statusColor(ticket.status)">
                         {{ statusLabel(ticket.status) }}
