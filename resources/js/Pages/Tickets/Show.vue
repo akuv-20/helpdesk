@@ -1,8 +1,9 @@
 <script setup>
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import AppLayout from '../../Layouts/AppLayout.vue';
 import RichInput from '../../Components/RichInput.vue';
+import EntityChip from '../../Components/EntityChip.vue';
 
 const props = defineProps({
     ticket: { type: Object, required: true },
@@ -31,10 +32,9 @@ const canReply = computed(() => props.ticket.is_requester !== false && ![5, 6].i
 const statusLabel = computed(() => statusLabels[props.ticket.status] ?? 'En proceso');
 const dotColor = computed(() => statusDot[props.ticket.status] ?? 'bg-slate-400');
 const typeLabel = computed(() => (props.ticket.type === 1 ? 'Incidente' : 'Solicitud'));
-const assignedTo = computed(() => {
-    const parts = [...(props.ticket.technicians ?? []), ...(props.ticket.groups ?? [])];
-    return parts.length ? parts.join(', ') : 'Sin asignar aún';
-});
+const technicians = computed(() => props.ticket.technicians ?? []);
+const groups = computed(() => props.ticket.groups ?? []);
+const hasAssignees = computed(() => technicians.value.length > 0 || groups.value.length > 0);
 
 function initials(name) {
     if (!name) return '?';
@@ -76,6 +76,40 @@ function respondSolution(action) {
         onSuccess: () => solutionForm.reset(),
     });
 }
+
+// Previsualización de adjuntos: imágenes y PDF se ven en un modal (con opción de
+// descargar); el resto de tipos se descargan directo (no hay vista previa nativa).
+const preview = ref(null); // { docId, file, kind }
+
+const IMAGE_EXT = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
+
+function fileKind(name) {
+    const ext = (name ?? '').split('.').pop()?.toLowerCase() ?? '';
+    if (IMAGE_EXT.includes(ext)) return 'image';
+    if (ext === 'pdf') return 'pdf';
+    return 'other';
+}
+function isPreviewable(name) {
+    return fileKind(name) !== 'other';
+}
+function downloadHref(docId) {
+    return `/tickets/${props.ticket.id}/adjuntos/${docId}`;
+}
+function viewHref(docId) {
+    return `/tickets/${props.ticket.id}/adjuntos/${docId}?view=1`;
+}
+function openPreview(entry) {
+    preview.value = { docId: entry.doc_id, file: entry.file, kind: fileKind(entry.file) };
+}
+function closePreview() {
+    preview.value = null;
+}
+
+function onKeydown(e) {
+    if (e.key === 'Escape' && preview.value) closePreview();
+}
+onMounted(() => window.addEventListener('keydown', onKeydown));
+onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
 
 // Aprobar / rechazar una VALIDACIÓN (aprobación pedida por un técnico en GLPI).
 // Es distinta de la solución: aquí autorizas o no el requerimiento.
@@ -253,25 +287,37 @@ function respondValidation(action) {
                         ]"
                     >
                         <div class="mb-1 flex items-center justify-between gap-2 text-xs text-slate-500">
-                            <span class="truncate">
-                                {{ entry.author || 'Soporte' }}
-                                <span v-if="entry.kind === 'solution'" class="ml-1 font-medium text-green-700">· Solución</span>
-                                <span v-else-if="entry.kind === 'rejection'" class="ml-1 font-medium text-red-600">· Rechazo</span>
-                                <span v-else-if="entry.kind === 'description'" class="ml-1 text-slate-400">· Solicitud inicial</span>
-                                <span v-else-if="entry.kind === 'validation_request'" class="ml-1 font-medium text-indigo-700">· Solicitud de aprobación</span>
-                                <span v-else-if="entry.kind === 'validation_approved'" class="ml-1 font-medium text-green-700">· Aprobación concedida</span>
-                                <span v-else-if="entry.kind === 'validation_rejected'" class="ml-1 font-medium text-red-600">· Aprobación rechazada</span>
+                            <span class="flex min-w-0 items-center gap-1.5">
+                                <EntityChip :label="entry.author || 'Soporte'" variant="user" />
+                                <span v-if="entry.kind === 'solution'" class="font-medium text-green-700">· Solución</span>
+                                <span v-else-if="entry.kind === 'rejection'" class="font-medium text-red-600">· Rechazo</span>
+                                <span v-else-if="entry.kind === 'description'" class="text-slate-400">· Solicitud inicial</span>
+                                <span v-else-if="entry.kind === 'validation_request'" class="font-medium text-indigo-700">· Solicitud de aprobación</span>
+                                <span v-else-if="entry.kind === 'validation_approved'" class="font-medium text-green-700">· Aprobación concedida</span>
+                                <span v-else-if="entry.kind === 'validation_rejected'" class="font-medium text-red-600">· Aprobación rechazada</span>
                             </span>
                             <span class="shrink-0">{{ entry.date }}</span>
                         </div>
 
-                        <a
-                            v-if="entry.kind === 'document'"
-                            :href="`/tickets/${ticket.id}/adjuntos/${entry.doc_id}`"
-                            class="inline-flex items-center gap-2 text-sm text-blue-600 hover:underline"
-                        >
-                            <span class="text-slate-400">📎</span>{{ entry.file }}
-                        </a>
+                        <template v-if="entry.kind === 'document'">
+                            <!-- Imágenes y PDF: abren en un modal con vista previa. -->
+                            <button
+                                v-if="isPreviewable(entry.file)"
+                                type="button"
+                                class="inline-flex items-center gap-2 text-sm text-blue-600 hover:underline"
+                                @click="openPreview(entry)"
+                            >
+                                <span class="text-slate-400">📎</span>{{ entry.file }}
+                            </button>
+                            <!-- Otros tipos: descarga directa. -->
+                            <a
+                                v-else
+                                :href="downloadHref(entry.doc_id)"
+                                class="inline-flex items-center gap-2 text-sm text-blue-600 hover:underline"
+                            >
+                                <span class="text-slate-400">📎</span>{{ entry.file }}
+                            </a>
+                        </template>
                         <!-- Contenido HTML saneado en el backend (imágenes inline vía proxy) -->
                         <div v-else class="prose-ticket text-sm text-slate-700" v-html="entry.content || '—'"></div>
                     </div>
@@ -288,12 +334,17 @@ function respondValidation(action) {
                             <dd class="text-slate-700">{{ ticket.opened_at ?? '—' }}</dd>
                         </div>
                         <div>
-                            <dt class="text-xs text-slate-400">Tipo</dt>
-                            <dd class="text-slate-700">{{ typeLabel }}</dd>
+                            <dt class="mb-1 text-xs text-slate-400">Tipo</dt>
+                            <dd>
+                                <EntityChip :label="typeLabel" :variant="ticket.type === 1 ? 'incident' : 'request'" />
+                            </dd>
                         </div>
                         <div>
-                            <dt class="text-xs text-slate-400">Categoría</dt>
-                            <dd class="text-slate-700">{{ ticket.category ?? '—' }}</dd>
+                            <dt class="mb-1 text-xs text-slate-400">Categoría</dt>
+                            <dd>
+                                <EntityChip v-if="ticket.category" :label="ticket.category" variant="category" />
+                                <span v-else class="text-slate-400">—</span>
+                            </dd>
                         </div>
                         <div>
                             <dt class="text-xs text-slate-400">Estado</dt>
@@ -308,17 +359,70 @@ function respondValidation(action) {
                     <h2 class="mb-3 text-sm font-semibold text-slate-700">Actores</h2>
                     <dl class="space-y-3 text-sm">
                         <div>
-                            <dt class="text-xs text-slate-400">Solicitante</dt>
-                            <dd class="text-slate-700">{{ ticket.requester ?? '—' }}</dd>
+                            <dt class="mb-1 text-xs text-slate-400">Solicitante</dt>
+                            <dd>
+                                <EntityChip v-if="ticket.requester" :label="ticket.requester" variant="user" />
+                                <span v-else class="text-slate-400">—</span>
+                            </dd>
                         </div>
                         <div>
-                            <dt class="text-xs text-slate-400">Asignado a</dt>
-                            <dd class="text-slate-700">{{ assignedTo }}</dd>
+                            <dt class="mb-1 text-xs text-slate-400">Asignado a</dt>
+                            <dd v-if="hasAssignees" class="flex flex-wrap gap-1.5">
+                                <EntityChip v-for="t in technicians" :key="'t-' + t" :label="t" variant="technician" />
+                                <EntityChip v-for="g in groups" :key="'g-' + g" :label="g" variant="group" />
+                            </dd>
+                            <dd v-else class="text-slate-400">Sin asignar aún</dd>
                         </div>
                     </dl>
                 </div>
             </aside>
         </div>
+
+        <!-- Modal de previsualización de adjunto (imagen o PDF) -->
+        <Teleport to="body">
+            <div
+                v-if="preview"
+                class="fixed inset-0 z-50 flex flex-col bg-black/70 p-4 sm:p-8"
+                @click.self="closePreview"
+            >
+                <!-- Barra superior: nombre + descargar + cerrar -->
+                <div class="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 pb-3 text-white">
+                    <span class="truncate text-sm font-medium">{{ preview.file }}</span>
+                    <div class="flex shrink-0 items-center gap-2">
+                        <a
+                            :href="downloadHref(preview.docId)"
+                            class="inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-white/25"
+                        >
+                            ↓ Descargar
+                        </a>
+                        <button
+                            type="button"
+                            aria-label="Cerrar"
+                            class="grid h-8 w-8 place-items-center rounded-lg bg-white/15 text-lg text-white transition hover:bg-white/25"
+                            @click="closePreview"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Contenido -->
+                <div class="mx-auto flex w-full max-w-5xl flex-1 overflow-hidden rounded-xl bg-white">
+                    <img
+                        v-if="preview.kind === 'image'"
+                        :src="viewHref(preview.docId)"
+                        :alt="preview.file"
+                        class="m-auto max-h-full max-w-full object-contain"
+                    />
+                    <iframe
+                        v-else
+                        :src="viewHref(preview.docId)"
+                        :title="preview.file"
+                        class="h-full w-full"
+                    ></iframe>
+                </div>
+            </div>
+        </Teleport>
     </AppLayout>
 </template>
 
