@@ -450,6 +450,119 @@ class GlpiClient
         }
     }
 
+    /** Nombre de archivo de un documento de GLPI por id (cacheado). */
+    protected function documentName(int $documentId): ?string
+    {
+        if ($documentId <= 0) {
+            return null;
+        }
+
+        return Cache::remember("glpi:docname:{$documentId}", now()->addMinutes(30), function () use ($documentId) {
+            $d = $this->legacyHttp()->get("/Document/{$documentId}")->json();
+
+            return is_array($d) ? ($d['filename'] ?? $d['name'] ?? null) : null;
+        });
+    }
+
+    /**
+     * Vínculos documento↔sub-ítem (seguimientos/soluciones) de un timeline v2.
+     * El API v2 solo lista en el timeline los documentos vinculados directo al
+     * Ticket; los que un técnico adjunta dentro de un seguimiento (o solución) se
+     * guardan contra el ITILFollowup/ITILSolution y NO llegan al v2. Aquí los
+     * recuperamos por legacy (Document_Item de cada sub-ítem). Requiere legacy.
+     *
+     * @param  array<int, array<string, mixed>>  $items  timeline v2
+     * @return array<int, array{doc:int, uid:int, date:string}>
+     */
+    protected function subItemDocLinks(array $items): array
+    {
+        if (! $this->hasLegacyTokens()) {
+            return [];
+        }
+
+        $links = [];
+        foreach ($items as $entry) {
+            $type = $entry['type'] ?? '';
+            $item = $entry['item'] ?? [];
+            $id = (int) ($item['id'] ?? 0);
+            $res = $type === 'Followup' ? 'ITILFollowup' : ($type === 'Solution' ? 'ITILSolution' : null);
+            if ($id <= 0 || $res === null) {
+                continue;
+            }
+            $date = $item['date'] ?? $item['date_creation'] ?? '';
+
+            try {
+                $rows = $this->legacyHttp()->get("/{$res}/{$id}/Document_Item")->json() ?? [];
+            } catch (\Throwable $e) {
+                continue;
+            }
+            foreach ((is_array($rows) ? $rows : []) as $row) {
+                $doc = (int) ($row['documents_id'] ?? 0);
+                if ($doc > 0) {
+                    $links[] = ['doc' => $doc, 'uid' => (int) ($row['users_id'] ?? 0), 'date' => $row['date'] ?? $date];
+                }
+            }
+        }
+
+        return $links;
+    }
+
+    /**
+     * Adjuntos de seguimientos/soluciones como entradas de timeline 'document',
+     * para fusionarlos con el resto (el v2 no los trae). Excluye los ya listados
+     * como adjunto y las imágenes inline.
+     *
+     * @param  array<int, array<string, mixed>>  $items  timeline v2
+     * @param  array<int, bool>  $shownDocIds  docs ya listados como adjunto
+     * @param  array<int, bool>  $inlineDocIds  docs embebidos como imagen inline
+     * @return array<int, array{_date:string, kind:string, author:?string, content:null, file:?string, doc_id:int}>
+     */
+    protected function subItemDocuments(array $items, array $shownDocIds, array $inlineDocIds, callable $resolveName): array
+    {
+        $out = [];
+        foreach ($this->subItemDocLinks($items) as $link) {
+            $docId = $link['doc'];
+            if (isset($shownDocIds[$docId]) || isset($inlineDocIds[$docId])) {
+                continue;
+            }
+            $shownDocIds[$docId] = true; // no duplicar si cuelga de 2 sub-ítems
+
+            $out[] = [
+                '_date' => $link['date'],
+                'kind' => 'document',
+                'author' => $link['uid'] ? $resolveName($link['uid']) : null,
+                'content' => null,
+                'file' => $this->documentName($docId) ?? 'archivo',
+                'doc_id' => $docId,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Ids de documentos adjuntos a los seguimientos/soluciones de un ticket
+     * (los que el v2 no lista). Se usa para autorizar la descarga de esos
+     * adjuntos, que el chequeo por /Timeline/Document dejaría fuera.
+     *
+     * @return array<int, bool>
+     */
+    protected function subItemDocumentIds(int $ticketId): array
+    {
+        try {
+            $items = $this->oauthHttp()->get("/Assistance/Ticket/{$ticketId}/Timeline")->json() ?? [];
+        } catch (\Throwable $e) {
+            return [];
+        }
+
+        $ids = [];
+        foreach ($this->subItemDocLinks(is_array($items) ? $items : []) as $link) {
+            $ids[$link['doc']] = true;
+        }
+
+        return $ids;
+    }
+
     /** ¿El usuario es (o fue) validador en alguna validación del ticket? */
     protected function isValidatorOnTicket(array $timeline, int $userId): bool
     {
@@ -704,18 +817,24 @@ class GlpiClient
             }
         }
 
-        // El documento debe estar vinculado a ESE ticket.
+        // El documento debe estar vinculado a ESE ticket: directo (v2
+        // /Timeline/Document) o a uno de sus seguimientos/soluciones (esos el v2
+        // no los lista, van por legacy). Sin esto, un adjunto de seguimiento daría
+        // 404 al abrirlo aunque se muestre en el timeline.
         $docs = $this->oauthHttp()->get("/Assistance/Ticket/{$ticketId}/Timeline/Document")->json() ?? [];
         $match = collect($docs)->first(function ($entry) use ($documentId) {
             $item = $entry['item'] ?? [];
 
             return (int) ($item['documents_id'] ?? 0) === $documentId;
         });
-        if (! $match) {
-            return null;
-        }
 
-        $name = $match['item']['document']['name'] ?? 'archivo';
+        if ($match) {
+            $name = $match['item']['document']['name'] ?? 'archivo';
+        } elseif (isset($this->subItemDocumentIds($ticketId)[$documentId])) {
+            $name = $this->documentName($documentId) ?? 'archivo';
+        } else {
+            return null; // el documento no pertenece a este ticket
+        }
 
         // Descarga binaria (sin acceptJson, para recibir el archivo tal cual).
         $dl = Http::withToken($this->oauthToken())
@@ -998,6 +1117,23 @@ class GlpiClient
 
             return null; // tareas, validaciones, etc.
         })->filter();
+
+        // Adjuntos de seguimientos/soluciones: el API v2 no los trae en el
+        // timeline (solo los vinculados directo al Ticket). Los recuperamos por
+        // legacy y los fusionamos como entradas 'document', evitando duplicar los
+        // ya listados y las imágenes inline.
+        $shownDocIds = [];
+        foreach ($items as $entry) {
+            if (($entry['type'] ?? '') === 'Document') {
+                $d = (int) ($entry['item']['documents_id'] ?? ($entry['item']['document']['id'] ?? 0));
+                if ($d) {
+                    $shownDocIds[$d] = true;
+                }
+            }
+        }
+        foreach ($this->subItemDocuments($items, $shownDocIds, $inlineDocIds, $resolveName) as $doc) {
+            $entries->push($doc);
+        }
 
         // Validaciones (aprobaciones): una entrada por la solicitud del técnico y
         // otra por la respuesta (si ya fue respondida), como las muestra GLPI.
