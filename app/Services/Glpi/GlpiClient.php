@@ -489,6 +489,10 @@ class GlpiClient
             if ($id <= 0 || $res === null) {
                 continue;
             }
+            // Usamos la fecha del sub-ítem (v2), NO la del Document_Item (legacy):
+            // vienen de sesiones API con distinta zona horaria, así que la legacy
+            // desfasaría la hora y sacaría el adjunto de su lugar en el orden. Con
+            // la del seguimiento comparten hora y quedan juntos (sort estable).
             $date = $item['date'] ?? $item['date_creation'] ?? '';
 
             try {
@@ -499,7 +503,7 @@ class GlpiClient
             foreach ((is_array($rows) ? $rows : []) as $row) {
                 $doc = (int) ($row['documents_id'] ?? 0);
                 if ($doc > 0) {
-                    $links[] = ['doc' => $doc, 'uid' => (int) ($row['users_id'] ?? 0), 'date' => $row['date'] ?? $date];
+                    $links[] = ['doc' => $doc, 'uid' => (int) ($row['users_id'] ?? 0), 'date' => $date];
                 }
             }
         }
