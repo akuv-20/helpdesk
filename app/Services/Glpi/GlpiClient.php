@@ -1611,6 +1611,40 @@ class GlpiClient
     }
 
     /**
+     * Provisiona al usuario en GLPI EN EL LOGIN: lo da de alta si aún no existe
+     * (mismo alta JIT que el primer ticket) y, exista o no, completa su zona
+     * horaria si la tiene vacía. Pensado para llamarse en el callback de Entra.
+     *
+     * A diferencia de ensureUser(), este método NUNCA lanza excepción ni bloquea
+     * el login: si GLPI no está configurado, faltan tokens legacy o la API falla,
+     * simplemente no hace nada (swallow + log). El alta del primer ticket sigue
+     * como red de seguridad por si aquí no se pudo crear.
+     */
+    public function ensureUserProvisioned(string $email, ?string $name, ?string $timezone): void
+    {
+        if (! $this->isConfigured() || ! $this->hasLegacyTokens()) {
+            return;
+        }
+
+        try {
+            if ($this->findUserId($email) === null) {
+                $userId = $this->legacyCreateUser($email, $name, $timezone);
+                if ($userId !== null) {
+                    Cache::forget($this->userIdCacheKey($email));
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('GLPI: no se pudo dar de alta al usuario en el login', [
+                'email' => $email, 'error' => $e->getMessage(),
+            ]);
+        }
+
+        // Completa la zona horaria si el usuario ya existía y la tenía vacía
+        // (caso de los creados por SAML). Es seguro y cacheado por su cuenta.
+        $this->ensureUserTimezone($email, $timezone);
+    }
+
+    /**
      * Completa la zona horaria del usuario EN GLPI si aún no tiene ninguna.
      * Se llama en cada login: los usuarios creados por SAML (no por el alta JIT
      * del portal) no traen timezone, y GLPI muestra sus horas mal.

@@ -77,10 +77,10 @@ class EntraController extends Controller
 
         $user = User::updateOrCreate(['email' => $email], $attributes);
 
-        // Completa la zona horaria del usuario EN GLPI si la tiene vacía (los
-        // creados por SAML no la traen; el alta JIT solo cubre a los nuevos).
-        // Si ya tiene una, no se toca. Nunca bloquea el login.
-        app(GlpiClient::class)->ensureUserTimezone($user->email, $user->timezone);
+        // Provisiona al usuario EN GLPI al iniciar sesión: lo da de alta si aún
+        // no existe (para que exista desde el login, sin esperar al primer ticket)
+        // y completa su zona horaria si la tiene vacía. Nunca bloquea el login.
+        app(GlpiClient::class)->ensureUserProvisioned($user->email, $user->name, $user->timezone);
 
         Auth::login($user, remember: true);
 

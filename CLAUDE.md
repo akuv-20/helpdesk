@@ -21,18 +21,23 @@ Los técnicos siguen trabajando en GLPI original. Instancia GLPI: `https://helpd
   **guarda cifrado** en `users` y se reutiliza/renueva → el consentimiento se pide una sola vez.
 
 **Provisioning JIT del usuario en GLPI:** GLPI crea usuarios en su primer login SAML; como el portal entra
-por Entra, el solicitante puede no existir. `GlpiClient::ensureUser()` lo da de alta al vuelo por legacy
-(`POST /User` con login=email + `POST /UserEmail`) al crear su primer ticket. Login=email para que, cuando
-luego entre por SAML, GLPI reutilice ese registro (no duplique).
+por Entra, el solicitante puede no existir. El alta se hace al vuelo por legacy (`POST /User` con login=email
++ `POST /UserEmail`). Login=email para que, cuando luego entre por SAML, GLPI reutilice ese registro (no
+duplique). Ocurre en **dos momentos**: (1) **en el login**, `GlpiClient::ensureUserProvisioned()` (llamado en
+`EntraController::callback`) lo da de alta si no existe —así el usuario existe en GLPI desde que inicia sesión,
+sin esperar al primer ticket— y de paso completa su zona horaria; nunca lanza excepción ni bloquea el login
+(swallow + log, y no hace nada si falta config/legacy). (2) **al crear el primer ticket**,
+`GlpiClient::ensureUser()` sigue como **red de seguridad** (idempotente: si ya se creó en el login, solo
+resuelve el id). `ensureUser()` sí lanza (`requireLegacy`), por eso en el login se usa el wrapper seguro.
 
 **Zona horaria:** en el login se pide el campo `country` a Graph (`config services.microsoft.fields`) y
 `EntraController::timezoneFromCountry()` la deriva (CL/Chile→America/Santiago, PE/Perú→America/Lima),
 guardándola en `users.timezone` (se actualiza en cada login). Hacia GLPI va por dos vías: en el **alta JIT**
 (`legacyCreateUser`, solo usuarios nuevos) y en **cada login** vía `GlpiClient::ensureUserTimezone()`, que la
 completa **solo si el usuario en GLPI la tiene vacía** (los creados por SAML no la traen); si ya tiene una, no
-se toca. No crea al usuario si no existe (eso lo hace el alta JIT del primer ticket), nunca bloquea el login
-(swallow + log) y cachea el chequeo 7 días por usuario (`glpi:tz_checked:{id}`) para no consultar GLPI en cada
-inicio de sesión.
+se toca. `ensureUserTimezone()` en sí NO crea al usuario (de eso se encarga `ensureUserProvisioned` en el login,
+o el alta del primer ticket), nunca bloquea el login (swallow + log) y cachea el chequeo 7 días por usuario
+(`glpi:tz_checked:{id}`) para no consultar GLPI en cada inicio de sesión.
 
 **Fechas mostradas (conversión de zona):** GLPI entrega las fechas en la zona de la **sesión API** (la cuenta de
 servicio), no en la del usuario que mira. Por eso `GlpiClient::fmtDate()` las interpreta desde
