@@ -4,6 +4,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import AppLayout from '../../Layouts/AppLayout.vue';
 import RichInput from '../../Components/RichInput.vue';
 import EntityChip from '../../Components/EntityChip.vue';
+import { compressImages } from '../../lib/compressImage';
 
 const props = defineProps({
     ticket: { type: Object, required: true },
@@ -49,12 +50,24 @@ function onReply({ content, images }) {
     form.content = content;
     form.inline_images = images;
 }
-function onFileChange(e) {
-    form.attachments = [...form.attachments, ...Array.from(e.target.files)];
+const compressing = ref(false);
+async function onFileChange(e) {
+    const files = Array.from(e.target.files);
     e.target.value = '';
+    compressing.value = true;
+    try {
+        form.attachments = [...form.attachments, ...(await compressImages(files))];
+    } finally {
+        compressing.value = false;
+    }
 }
 function removeFile(i) {
     form.attachments = form.attachments.filter((_, idx) => idx !== i);
+}
+function fileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
+    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
 }
 function sendReply() {
     form.post(`/tickets/${props.ticket.id}/responder`, {
@@ -278,12 +291,14 @@ function respondValidation(action) {
                         />
                         <button
                             type="submit"
-                            :disabled="form.processing"
+                            :disabled="form.processing || compressing"
                             class="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-60"
                         >
                             {{ form.processing ? 'Enviando…' : 'Enviar respuesta' }}
                         </button>
                     </div>
+
+                    <p v-if="compressing" class="mt-2 text-xs text-slate-500">Comprimiendo imágenes…</p>
 
                     <ul v-if="form.attachments.length" class="mt-2 space-y-1">
                         <li
@@ -291,7 +306,7 @@ function respondValidation(action) {
                             :key="i"
                             class="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-1.5 text-sm text-slate-700"
                         >
-                            <span class="truncate">{{ f.name }}</span>
+                            <span class="truncate">{{ f.name }} <span class="text-xs text-slate-400">({{ fileSize(f.size) }})</span></span>
                             <button type="button" class="ml-3 shrink-0 text-xs text-red-500 hover:underline" @click="removeFile(i)">quitar</button>
                         </li>
                     </ul>

@@ -3,6 +3,7 @@ import { Head, Link, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import AppLayout from '../../Layouts/AppLayout.vue';
 import RichInput from '../../Components/RichInput.vue';
+import { compressImages } from '../../lib/compressImage';
 
 const props = defineProps({
     types: { type: Array, default: () => [] },
@@ -29,13 +30,28 @@ function onDescription({ content, images }) {
     form.inline_images = images;
 }
 
-function onFileChange(e) {
-    form.attachments = [...form.attachments, ...Array.from(e.target.files)];
+const compressing = ref(false);
+
+async function onFileChange(e) {
+    const files = Array.from(e.target.files);
     e.target.value = ''; // permite volver a elegir el mismo archivo
+    compressing.value = true;
+    try {
+        // Las imágenes se comprimen en el navegador antes de subir.
+        form.attachments = [...form.attachments, ...(await compressImages(files))];
+    } finally {
+        compressing.value = false;
+    }
 }
 
 function removeFile(i) {
     form.attachments = form.attachments.filter((_, idx) => idx !== i);
+}
+
+function fileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
+    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
 }
 
 const steps = ['Tipo', 'Categoría', 'Detalles'];
@@ -216,7 +232,9 @@ const typeLabel = (v) => props.types.find((t) => t.value === v)?.label ?? '';
                     class="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-4 file:py-2 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
                     @change="onFileChange"
                 />
-                <p class="mt-1 text-xs text-slate-400">Hasta 5 archivos, 10 MB c/u.</p>
+                <p class="mt-1 text-xs text-slate-400">Hasta 5 archivos, 10 MB c/u. Las imágenes se comprimen automáticamente.</p>
+
+                <p v-if="compressing" class="mt-2 text-xs text-slate-500">Comprimiendo imágenes…</p>
 
                 <ul v-if="form.attachments.length" class="mt-2 space-y-1">
                     <li
@@ -224,7 +242,7 @@ const typeLabel = (v) => props.types.find((t) => t.value === v)?.label ?? '';
                         :key="i"
                         class="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-1.5 text-sm text-slate-700"
                     >
-                        <span class="truncate">{{ f.name }}</span>
+                        <span class="truncate">{{ f.name }} <span class="text-xs text-slate-400">({{ fileSize(f.size) }})</span></span>
                         <button type="button" class="ml-3 shrink-0 text-xs text-red-500 hover:underline" @click="removeFile(i)">quitar</button>
                     </li>
                 </ul>
@@ -235,7 +253,7 @@ const typeLabel = (v) => props.types.find((t) => t.value === v)?.label ?? '';
                 <button type="button" class="text-sm text-slate-500 hover:underline" @click="back">← Cambiar categoría</button>
                 <button
                     type="submit"
-                    :disabled="form.processing"
+                    :disabled="form.processing || compressing"
                     class="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-60"
                 >
                     {{ form.processing ? 'Enviando…' : 'Enviar ticket' }}

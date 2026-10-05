@@ -1,5 +1,6 @@
 <script setup>
 import { onBeforeUnmount, ref } from 'vue';
+import { compressImage } from '../lib/compressImage';
 
 const props = defineProps({
     placeholder: { type: String, default: 'Escribe aquí…' },
@@ -39,13 +40,15 @@ function insertHtml(html) {
     document.execCommand('insertHTML', false, html);
 }
 
-function onPaste(e) {
+async function onPaste(e) {
     const items = e.clipboardData?.items ?? [];
     for (const it of items) {
         if (it.type.startsWith('image/')) {
             e.preventDefault();
-            const file = it.getAsFile();
-            if (!file) continue;
+            const original = it.getAsFile();
+            if (!original) continue;
+            // Comprime la captura pegada antes de incrustarla/subirla.
+            const file = await compressImage(original);
             const uid = 'u' + counter++;
             const url = URL.createObjectURL(file);
             images.push({ uid, file, url });
