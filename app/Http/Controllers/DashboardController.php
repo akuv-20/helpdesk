@@ -14,7 +14,9 @@ class DashboardController extends Controller
         $email = $request->user()->email;
 
         $q = $request->query('q');
-        $status = $request->query('status');
+        // Por defecto (primera visita, sin parámetro) se muestran TODOS los
+        // estados menos los cerrados. 'all' = todos; o lista "1,2,3,4,5".
+        $status = $request->query('status', '1,2,3,4,5');
         $page = (int) $request->query('page', 1);
 
         // Paginación + búsqueda + filtro resueltos en el servidor (escala).
@@ -28,7 +30,9 @@ class DashboardController extends Controller
                 'per_page' => $result['per_page'],
                 'last_page' => $result['last_page'],
             ],
-            'filters' => ['q' => $q ?? '', 'status' => $status ?: 'all'],
+            'filters' => ['q' => $q ?? '', 'status' => $status],
+            // Conteo por estado para los chips del filtro (respeta la búsqueda).
+            'statusCounts' => $glpi->statusCountsForRequester($email, $q ?: null),
             // Aprobaciones (validaciones) que el usuario tiene pendientes de responder.
             'pendingApprovals' => $glpi->pendingApprovalsForUser($email),
             'glpiConfigured' => $glpi->isConfigured(),

@@ -127,17 +127,108 @@ class GlpiClient
             : $this->oauthTicketsPage($userId, $page, $perPage, $q, $statusFilter);
     }
 
-    /** Valores de estado GLPI (field 12) según el filtro del front. */
+    /**
+     * Valores de estado GLPI (field 12) según el filtro del front. Acepta una
+     * lista separada por comas de ids 1..6 (p. ej. "1,2,3,4,5"); 'all'/vacío =
+     * sin filtro. Mantiene compatibilidad con el antiguo 'curso' (=2,3).
+     */
     protected function statusFilterValues(?string $filter): array
     {
-        return match ($filter) {
-            '1' => [1],       // Nuevos
-            'curso' => [2, 3], // En curso (asignado/planificado)
-            '4' => [4],       // En espera
-            '5' => [5],       // Resueltos
-            '6' => [6],       // Cerrados
-            default => [],
-        };
+        if ($filter === null || $filter === '' || $filter === 'all') {
+            return [];
+        }
+
+        $out = [];
+        foreach (explode(',', $filter) as $part) {
+            $part = trim($part);
+            if ($part === 'curso') {
+                $out[] = 2;
+                $out[] = 3;
+
+                continue;
+            }
+            $n = (int) $part;
+            if ($n >= 1 && $n <= 6) {
+                $out[] = $n;
+            }
+        }
+
+        return array_values(array_unique($out));
+    }
+
+    /**
+     * Conteo de tickets del solicitante por estado GLPI (1..6), respetando el
+     * texto de búsqueda. Alimenta los contadores de los chips del listado.
+     *
+     * @return array<int, int>
+     */
+    public function statusCountsForRequester(string $email, ?string $q = null): array
+    {
+        $empty = [1 => 0, 2 => 0, 3 => 0, 4 => 0, 5 => 0, 6 => 0];
+
+        if (! $this->isConfigured()) {
+            return $empty;
+        }
+
+        $userId = $this->findUserId($email);
+        if ($userId === null) {
+            return $empty;
+        }
+
+        return $this->hasLegacyTokens()
+            ? $this->legacyStatusCounts($userId, $q)
+            : $this->oauthStatusCounts($userId, $q);
+    }
+
+    /** Conteo por estado vía search legacy (una consulta totalcount por estado, cacheada 60s). */
+    protected function legacyStatusCounts(int $userId, ?string $q): array
+    {
+        $key = 'glpi:statuscounts:'.$userId.':'.md5((string) $q);
+
+        return Cache::remember($key, now()->addSeconds(60), function () use ($userId, $q) {
+            $counts = [];
+            foreach ([1, 2, 3, 4, 5, 6] as $st) {
+                $criteria = [
+                    ['field' => 4, 'searchtype' => 'equals', 'value' => $userId],
+                    ['link' => 'AND', 'field' => 12, 'searchtype' => 'equals', 'value' => $st],
+                ];
+                if (filled($q)) {
+                    $criteria[] = ['link' => 'AND', 'criteria' => [
+                        ['field' => 1, 'searchtype' => 'contains', 'value' => $q],
+                        ['link' => 'OR', 'field' => 21, 'searchtype' => 'contains', 'value' => $q],
+                    ]];
+                }
+
+                $resp = $this->legacyHttp()->get('/search/Ticket', [
+                    'criteria' => $criteria,
+                    'forcedisplay' => [2],
+                    'range' => '0-0', // solo queremos totalcount, sin traer filas
+                ]);
+                $counts[$st] = (int) ($resp->json('totalcount') ?? 0);
+            }
+
+            return $counts;
+        });
+    }
+
+    /** Conteo por estado vía oauth (en memoria, sobre los tickets ya cargados). */
+    protected function oauthStatusCounts(int $userId, ?string $q): array
+    {
+        $all = collect($this->oauthTicketsForUser($userId));
+        if (filled($q)) {
+            $needle = mb_strtolower($q);
+            $all = $all->filter(fn ($t) => str_contains($t['search'] ?? '', $needle));
+        }
+
+        $counts = [1 => 0, 2 => 0, 3 => 0, 4 => 0, 5 => 0, 6 => 0];
+        foreach ($all as $t) {
+            $s = (int) ($t['status'] ?? 0);
+            if (isset($counts[$s])) {
+                $counts[$s]++;
+            }
+        }
+
+        return $counts;
     }
 
     /** Página de tickets por el search legacy (filtra por solicitante en el servidor). */

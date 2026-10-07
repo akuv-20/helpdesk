@@ -6,7 +6,8 @@ import AppLayout from '../Layouts/AppLayout.vue';
 const props = defineProps({
     tickets: { type: Array, default: () => [] },
     pagination: { type: Object, default: () => ({ total: 0, page: 1, per_page: 20, last_page: 1 }) },
-    filters: { type: Object, default: () => ({ q: '', status: 'all' }) },
+    filters: { type: Object, default: () => ({ q: '', status: '1,2,3,4,5' }) },
+    statusCounts: { type: Object, default: () => ({}) },
     pendingApprovals: { type: Array, default: () => [] },
     glpiConfigured: { type: Boolean, default: false },
 });
@@ -45,31 +46,81 @@ const statusLabel = (s) => statusLabels[s] ?? 'En proceso';
 const statusColor = (s) => statusColors[s] ?? 'bg-slate-100 text-slate-600';
 const statusStripe = (s) => statusStripes[s] ?? 'border-l-slate-400';
 
+// Filtro de estado como chips multi-selección. Cada chip agrupa uno o más
+// estados GLPI; "En curso" junta asignado (2) y planificado (3).
+const STATUS_BUCKETS = [
+    { key: '1', label: 'Nuevos', ids: [1], dot: 'bg-green-500' },
+    { key: 'curso', label: 'En curso', ids: [2, 3], dot: 'bg-amber-500' },
+    { key: '4', label: 'En espera', ids: [4], dot: 'bg-slate-400' },
+    { key: '5', label: 'Resueltos', ids: [5], dot: 'bg-blue-500' },
+    { key: '6', label: 'Cerrados', ids: [6], dot: 'bg-slate-500' },
+];
+const ALL_IDS = [1, 2, 3, 4, 5, 6];
+
+function parseStatus(s) {
+    if (!s || s === 'all') return [...ALL_IDS];
+    const out = new Set();
+    String(s).split(',').forEach((p) => {
+        p = p.trim();
+        if (p === 'curso') { out.add(2); out.add(3); }
+        else { const n = Number(p); if (n >= 1 && n <= 6) out.add(n); }
+    });
+    return [...out];
+}
+
 // Controles (inicializados desde el servidor). Búsqueda/filtro/paginación
 // se resuelven server-side vía Inertia.
 const query = ref(props.filters.q ?? '');
-const statusFilter = ref(props.filters.status ?? 'all');
+const selected = ref(new Set(parseStatus(props.filters.status)));
 
-const hasFilters = computed(() => !!(query.value || (statusFilter.value && statusFilter.value !== 'all')));
-const showControls = computed(() => props.tickets.length > 0 || hasFilters.value);
+const counts = computed(() => props.statusCounts ?? {});
+const totalCount = computed(() => ALL_IDS.reduce((s, id) => s + (counts.value[id] ?? 0), 0));
+const bucketCount = (b) => b.ids.reduce((s, id) => s + (counts.value[id] ?? 0), 0);
+const isActive = (b) => b.ids.every((id) => selected.value.has(id));
+const isAll = computed(() => ALL_IDS.every((id) => selected.value.has(id)));
+
+function statusParam() {
+    if (isAll.value) return 'all';
+    return ALL_IDS.filter((id) => selected.value.has(id)).join(',');
+}
+
+function toggleBucket(b) {
+    const next = new Set(selected.value);
+    if (b.ids.every((id) => next.has(id))) {
+        // Apagar, salvo que dejara el filtro vacío (siempre ≥1 estado).
+        if ([...next].filter((id) => !b.ids.includes(id)).length === 0) return;
+        b.ids.forEach((id) => next.delete(id));
+    } else {
+        b.ids.forEach((id) => next.add(id));
+    }
+    selected.value = next;
+    reload(1);
+}
+
+function selectAll() {
+    selected.value = new Set(ALL_IDS);
+    reload(1);
+}
+
+const hasAnyTicket = computed(() => totalCount.value > 0);
+const showControls = computed(() => hasAnyTicket.value);
 const canPrev = computed(() => props.pagination.page > 1);
 const canNext = computed(() => props.pagination.page < props.pagination.last_page);
 
 function reload(page = 1) {
     router.get('/inicio', {
         q: query.value || undefined,
-        status: statusFilter.value !== 'all' ? statusFilter.value : undefined,
+        status: statusParam(), // siempre explícito (el default no es "all")
         page: page > 1 ? page : undefined,
     }, { preserveState: true, preserveScroll: true, replace: true });
 }
 
-// Búsqueda con debounce; el filtro de estado recarga al instante.
+// Búsqueda con debounce; los chips recargan al instante (en toggleBucket).
 let searchTimer = null;
 watch(query, () => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => reload(1), 350);
 });
-watch(statusFilter, () => reload(1));
 </script>
 
 <template>
@@ -123,25 +174,41 @@ watch(statusFilter, () => reload(1));
         </div>
 
         <template v-if="showControls">
-            <!-- Buscador + filtro por estado (server-side) -->
-            <div class="mb-4 flex flex-wrap gap-2">
+            <!-- Buscador (server-side) -->
+            <div class="mb-3">
                 <input
                     v-model="query"
                     type="search"
                     placeholder="Buscar por nombre o descripción…"
-                    class="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none"
+                    class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none"
                 />
-                <select
-                    v-model="statusFilter"
-                    class="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none"
+            </div>
+
+            <!-- Filtro de estado: chips multi-selección con contador -->
+            <div class="mb-4 flex flex-wrap items-center gap-2">
+                <button
+                    type="button"
+                    class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition"
+                    :class="isAll ? 'bg-slate-900 text-white' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'"
+                    @click="selectAll"
                 >
-                    <option value="all">Todos los estados</option>
-                    <option value="1">Nuevos</option>
-                    <option value="curso">En curso</option>
-                    <option value="4">En espera</option>
-                    <option value="5">Resueltos</option>
-                    <option value="6">Cerrados</option>
-                </select>
+                    Todos
+                    <span :class="isAll ? 'text-slate-300' : 'text-slate-400'">{{ totalCount }}</span>
+                </button>
+                <button
+                    v-for="b in STATUS_BUCKETS"
+                    :key="b.key"
+                    type="button"
+                    class="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition"
+                    :class="isActive(b)
+                        ? 'border-slate-300 bg-white text-slate-800 shadow-sm'
+                        : 'border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100'"
+                    @click="toggleBucket(b)"
+                >
+                    <span class="h-2 w-2 rounded-full" :class="isActive(b) ? b.dot : 'bg-slate-300'"></span>
+                    {{ b.label }}
+                    <span :class="isActive(b) ? 'text-slate-500' : 'text-slate-400'">{{ bucketCount(b) }}</span>
+                </button>
             </div>
 
             <div v-if="tickets.length" class="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
