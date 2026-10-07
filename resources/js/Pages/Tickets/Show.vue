@@ -5,6 +5,7 @@ import AppLayout from '../../Layouts/AppLayout.vue';
 import RichInput from '../../Components/RichInput.vue';
 import EntityChip from '../../Components/EntityChip.vue';
 import { compressImages } from '../../lib/compressImage';
+import { avatarColor } from '../../lib/avatarColor';
 
 const props = defineProps({
     ticket: { type: Object, required: true },
@@ -43,6 +44,17 @@ function initials(name) {
     if (!name) return '?';
     const p = name.trim().split(/\s+/);
     return ((p[0]?.[0] ?? '') + (p[1]?.[0] ?? '')).toUpperCase() || '?';
+}
+
+const copied = ref(false);
+async function copyNumber() {
+    try {
+        await navigator.clipboard.writeText(String(props.ticket.id));
+        copied.value = true;
+        setTimeout(() => (copied.value = false), 1500);
+    } catch {
+        // Portapapeles no disponible (contexto no seguro): sin acción.
+    }
 }
 
 const form = useForm({ content: '', inline_images: [], attachments: [] });
@@ -181,7 +193,16 @@ function respondValidation(action) {
         <div class="mb-5 flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3">
             <span class="h-3 w-3 rounded-full" :class="dotColor"></span>
             <h1 class="truncate text-lg font-semibold text-slate-900">{{ ticket.title }}</h1>
-            <span class="text-sm text-slate-400">#{{ ticket.id }}</span>
+            <button
+                type="button"
+                class="ml-auto inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                :title="copied ? 'Copiado' : 'Copiar número de ticket'"
+                @click="copyNumber"
+            >
+                <span class="tabular-nums">#{{ ticket.id }}</span>
+                <svg v-if="copied" class="h-3.5 w-3.5 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                <svg v-else class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            </button>
         </div>
 
         <div class="grid gap-5 lg:grid-cols-3">
@@ -321,7 +342,10 @@ function respondValidation(action) {
                     :key="i"
                     class="flex gap-3"
                 >
-                    <div class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-slate-200 text-xs font-semibold text-slate-600">
+                    <div
+                        class="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-xs font-semibold"
+                        :class="avatarColor(entry.author)"
+                    >
                         {{ initials(entry.author) }}
                     </div>
                     <div
