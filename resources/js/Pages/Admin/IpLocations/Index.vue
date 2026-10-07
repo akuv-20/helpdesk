@@ -1,6 +1,6 @@
 <script setup>
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import AppLayout from '../../../Layouts/AppLayout.vue';
 
 const props = defineProps({
@@ -14,10 +14,34 @@ const inputClass =
 
 const form = useForm({ cidr: '', locations_id: '', label: '', enabled: true });
 
+// Combobox de ubicación: input con filtro en vez de un <select> largo.
+const locationQuery = ref('');
+const locationOpen = ref(false);
+const filteredLocations = computed(() => {
+    const q = locationQuery.value.trim().toLowerCase();
+    const list = q ? props.locations.filter((l) => l.name.toLowerCase().includes(q)) : props.locations;
+    return list.slice(0, 50); // acota la lista visible aunque haya cientos
+});
+function onLocationInput() {
+    locationOpen.value = true;
+    form.locations_id = ''; // al editar el texto se deselecciona hasta elegir de la lista
+}
+function pickLocation(l) {
+    form.locations_id = l.id;
+    locationQuery.value = l.name;
+    locationOpen.value = false;
+}
+function closeLocationSoon() {
+    setTimeout(() => { locationOpen.value = false; }, 120);
+}
+
 function submit() {
     form.post('/admin/ubicaciones-ip', {
         preserveScroll: true,
-        onSuccess: () => form.reset('cidr', 'label'),
+        onSuccess: () => {
+            form.reset('cidr', 'label', 'locations_id');
+            locationQuery.value = '';
+        },
     });
 }
 
@@ -83,12 +107,35 @@ async function probar() {
                     <p class="mt-1 text-xs text-slate-400">Puedes escribir <code>192.168.32</code> (asume /24), <code>192.168.0.0/16</code>, etc.</p>
                     <p v-if="form.errors.cidr" class="mt-1 text-xs text-red-600">{{ form.errors.cidr }}</p>
                 </div>
-                <div>
+                <div class="relative">
                     <label class="mb-1 block text-xs font-medium text-slate-600">Ubicación de GLPI</label>
-                    <select v-model="form.locations_id" :class="inputClass">
-                        <option value="" disabled>Elige una ubicación…</option>
-                        <option v-for="l in locations" :key="l.id" :value="l.id">{{ l.name }}</option>
-                    </select>
+                    <input
+                        v-model="locationQuery"
+                        type="text"
+                        placeholder="Buscar ubicación…"
+                        autocomplete="off"
+                        :class="inputClass"
+                        @focus="locationOpen = true"
+                        @input="onLocationInput"
+                        @blur="closeLocationSoon"
+                    />
+                    <ul
+                        v-if="locationOpen && filteredLocations.length"
+                        class="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg"
+                    >
+                        <li
+                            v-for="l in filteredLocations"
+                            :key="l.id"
+                            class="cursor-pointer px-3 py-1.5 text-sm text-slate-700 hover:bg-blue-50"
+                            :class="{ 'bg-blue-50 font-medium': l.id === form.locations_id }"
+                            @mousedown.prevent="pickLocation(l)"
+                        >
+                            {{ l.name }}
+                        </li>
+                    </ul>
+                    <p v-if="locationOpen && locationQuery && !filteredLocations.length" class="mt-1 text-xs text-slate-400">
+                        Sin coincidencias.
+                    </p>
                     <p v-if="form.errors.locations_id" class="mt-1 text-xs text-red-600">{{ form.errors.locations_id }}</p>
                 </div>
                 <div class="sm:col-span-2">
