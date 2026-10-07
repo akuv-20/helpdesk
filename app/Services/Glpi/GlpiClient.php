@@ -456,7 +456,7 @@ class GlpiClient
         if ($cn === '') {
             $id = $fallbackId ?: (is_array($category) ? (int) ($category['id'] ?? 0) : 0);
             if ($id > 0) {
-                $row = collect($this->categoryRows())->firstWhere('id', $id);
+                $row = collect($this->fetchCategoryRows())->firstWhere('id', $id);
                 $cn = (string) ($row['completename'] ?? '');
             }
         }
