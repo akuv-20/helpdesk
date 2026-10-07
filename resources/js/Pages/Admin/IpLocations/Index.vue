@@ -13,6 +13,7 @@ const inputClass =
     'w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-100 focus:outline-none';
 
 const form = useForm({ cidr: '', locations_id: '', label: '', enabled: true });
+const editingId = ref(null); // null = creando; id = editando esa regla
 
 // Combobox de ubicación: input con filtro en vez de un <select> largo.
 const locationQuery = ref('');
@@ -35,14 +36,32 @@ function closeLocationSoon() {
     setTimeout(() => { locationOpen.value = false; }, 120);
 }
 
+function resetForm() {
+    editingId.value = null;
+    form.reset();
+    form.clearErrors();
+    locationQuery.value = '';
+}
+
 function submit() {
-    form.post('/admin/ubicaciones-ip', {
-        preserveScroll: true,
-        onSuccess: () => {
-            form.reset('cidr', 'label', 'locations_id');
-            locationQuery.value = '';
-        },
-    });
+    const opts = { preserveScroll: true, onSuccess: () => resetForm() };
+    if (editingId.value) {
+        form.put(`/admin/ubicaciones-ip/${editingId.value}`, opts);
+    } else {
+        form.post('/admin/ubicaciones-ip', opts);
+    }
+}
+
+function startEdit(rule) {
+    editingId.value = rule.id;
+    form.cidr = rule.cidr;
+    form.locations_id = rule.locations_id;
+    form.label = rule.label ?? '';
+    form.enabled = rule.enabled;
+    form.clearErrors();
+    locationQuery.value = rule.location_name ?? '';
+    // Lleva la vista al formulario (está arriba).
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function toggle(rule) {
@@ -97,9 +116,13 @@ async function probar() {
             La conexión con GLPI no está configurada, así que no hay ubicaciones para elegir.
         </div>
 
-        <!-- Alta de regla -->
-        <form class="mb-6 rounded-xl border border-slate-200 bg-white p-5" @submit.prevent="submit">
-            <h2 class="mb-3 text-sm font-semibold text-slate-700">Nueva regla</h2>
+        <!-- Alta / edición de regla -->
+        <form
+            class="mb-6 rounded-xl border bg-white p-5"
+            :class="editingId ? 'border-blue-300 ring-1 ring-blue-100' : 'border-slate-200'"
+            @submit.prevent="submit"
+        >
+            <h2 class="mb-3 text-sm font-semibold text-slate-700">{{ editingId ? 'Editar regla' : 'Nueva regla' }}</h2>
             <div class="grid gap-3 sm:grid-cols-2">
                 <div>
                     <label class="mb-1 block text-xs font-medium text-slate-600">Segmento (CIDR)</label>
@@ -143,13 +166,21 @@ async function probar() {
                     <input v-model="form.label" type="text" placeholder="Ej. Recepción fruta — Planta Oro Verde" :class="inputClass" />
                 </div>
             </div>
-            <div class="mt-4 flex justify-end">
+            <div class="mt-4 flex justify-end gap-2">
+                <button
+                    v-if="editingId"
+                    type="button"
+                    class="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+                    @click="resetForm"
+                >
+                    Cancelar
+                </button>
                 <button
                     type="submit"
                     :disabled="form.processing"
                     class="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-60"
                 >
-                    Agregar regla
+                    {{ editingId ? 'Guardar cambios' : 'Agregar regla' }}
                 </button>
             </div>
         </form>
@@ -190,7 +221,11 @@ async function probar() {
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
-                    <tr v-for="rule in rules" :key="rule.id" :class="rule.enabled ? '' : 'opacity-50'">
+                    <tr
+                        v-for="rule in rules"
+                        :key="rule.id"
+                        :class="[rule.enabled ? '' : 'opacity-50', editingId === rule.id ? 'bg-blue-50' : '']"
+                    >
                         <td class="px-4 py-2 font-mono text-slate-800">{{ rule.cidr }}</td>
                         <td class="px-4 py-2 text-slate-700">{{ rule.location_name ?? ('#' + rule.locations_id) }}</td>
                         <td class="px-4 py-2 text-slate-500">{{ rule.label || '—' }}</td>
@@ -204,8 +239,9 @@ async function probar() {
                                 {{ rule.enabled ? 'Activa' : 'Inactiva' }}
                             </button>
                         </td>
-                        <td class="px-4 py-2 text-right">
-                            <button type="button" class="text-xs text-red-500 hover:underline" @click="remove(rule)">Eliminar</button>
+                        <td class="px-4 py-2 text-right whitespace-nowrap">
+                            <button type="button" class="text-xs text-blue-600 hover:underline" @click="startEdit(rule)">Editar</button>
+                            <button type="button" class="ml-3 text-xs text-red-500 hover:underline" @click="remove(rule)">Eliminar</button>
                         </td>
                     </tr>
                 </tbody>
