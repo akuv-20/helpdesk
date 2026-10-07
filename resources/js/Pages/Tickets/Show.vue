@@ -34,6 +34,7 @@ const statusLabel = computed(() => statusLabels[props.ticket.status] ?? 'En proc
 const dotColor = computed(() => statusDot[props.ticket.status] ?? 'bg-slate-400');
 const typeLabel = computed(() => (props.ticket.type === 1 ? 'Incidente' : 'Solicitud'));
 const requesters = computed(() => props.ticket.requesters ?? (props.ticket.requester ? [props.ticket.requester] : []));
+const categoryPath = computed(() => props.ticket.category_path?.length ? props.ticket.category_path : (props.ticket.category ? [props.ticket.category] : []));
 const technicians = computed(() => props.ticket.technicians ?? []);
 const groups = computed(() => props.ticket.groups ?? []);
 const hasAssignees = computed(() => technicians.value.length > 0 || groups.value.length > 0);
@@ -387,10 +388,17 @@ function respondValidation(action) {
                         </div>
                         <div>
                             <dt class="mb-1 text-xs text-slate-400">Categoría</dt>
-                            <dd>
-                                <EntityChip v-if="ticket.category" :label="ticket.category" variant="category" />
-                                <span v-else class="text-slate-400">—</span>
+                            <dd v-if="categoryPath.length">
+                                <!-- Ruta padre en gris pequeño; la hoja como chip destacado. -->
+                                <p v-if="categoryPath.length > 1" class="mb-1 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[11px] leading-tight text-slate-400">
+                                    <template v-for="(seg, i) in categoryPath.slice(0, -1)" :key="i">
+                                        <span>{{ seg }}</span>
+                                        <span class="text-slate-300">›</span>
+                                    </template>
+                                </p>
+                                <EntityChip :label="categoryPath[categoryPath.length - 1]" variant="category" />
                             </dd>
+                            <dd v-else class="text-slate-400">—</dd>
                         </div>
                         <div>
                             <dt class="text-xs text-slate-400">Estado</dt>

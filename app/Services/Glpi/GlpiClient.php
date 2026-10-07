@@ -442,6 +442,43 @@ class GlpiClient
     }
 
     /**
+     * Ruta completa de la categoría como arreglo de segmentos, p.ej.
+     * ["Sistemas", "Frusys", "Error"]. Quita el nivel Incidente/Solicitud (el
+     * Tipo ya lo indica). Usa el completename del ticket si viene, o lo resuelve
+     * por id contra el listado cacheado de categorías. [] si no se determina.
+     *
+     * @return array<int, string>
+     */
+    protected function categoryPath(mixed $category, int $fallbackId = 0): array
+    {
+        $cn = is_array($category) ? (string) ($category['completename'] ?? '') : (string) $category;
+
+        if ($cn === '') {
+            $id = $fallbackId ?: (is_array($category) ? (int) ($category['id'] ?? 0) : 0);
+            if ($id > 0) {
+                $row = collect($this->categoryRows())->firstWhere('id', $id);
+                $cn = (string) ($row['completename'] ?? '');
+            }
+        }
+
+        if ($cn === '') {
+            return [];
+        }
+
+        $parts = array_values(array_filter(
+            array_map('trim', explode('>', $cn)),
+            fn ($p) => $p !== '',
+        ));
+
+        // Quita SOLO el nivel 2 si es Incidente/Solicitud (lo muestra el Tipo).
+        if (isset($parts[1]) && in_array($parts[1], ['Incidente', 'Solicitud'], true)) {
+            array_splice($parts, 1, 1);
+        }
+
+        return $parts;
+    }
+
+    /**
      * Mapa documents_id => users_id (autor del vínculo) de los adjuntos de un
      * ticket, por el API legacy. El API v2 no expone quién subió cada documento
      * en el timeline, así que resolvemos el autor con esto y no cae al fallback
@@ -1053,6 +1090,7 @@ class GlpiClient
             'can_respond_solution' => $statusId === 5,
             'type' => (int) ($t['type'] ?? 0),
             'category' => $t['category']['name'] ?? null,
+            'category_path' => $this->categoryPath($t['category'] ?? [], (int) ($t['itilcategories_id'] ?? 0)),
             'opened_at' => $this->fmtDate($t['date'] ?? null, 'd-m-Y H:i'),
             'updated_at' => $this->fmtDate($t['date_mod'] ?? null, 'd-m-Y H:i'),
             'requester' => $name($team->firstWhere('role', 'requester') ?? []),
