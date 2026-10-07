@@ -8,6 +8,7 @@ use App\Services\Glpi\GlpiClient;
 use App\Services\Ip\IpLocationResolver;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -20,9 +21,21 @@ class IpLocationController extends Controller
 {
     public function index(GlpiClient $glpi): Response
     {
+        Cache::forget('glpi:locations'); // mostrar siempre el estado actual de GLPI
+        $locations = collect($glpi->locations())->keyBy('id');
+
+        // Refresca el nombre mostrado con el completename ACTUAL de GLPI (por si
+        // cambió la jerarquía desde que se creó la regla); cae al cache si el id
+        // ya no está en la lista. No persiste: es solo para mostrar.
+        $rules = IpLocationRule::orderBy('cidr')->get()->map(function (IpLocationRule $r) use ($locations) {
+            $r->location_name = $locations[$r->locations_id]['name'] ?? $r->location_name;
+
+            return $r;
+        });
+
         return Inertia::render('Admin/IpLocations/Index', [
-            'rules' => IpLocationRule::orderBy('cidr')->get(),
-            'locations' => $glpi->locations(),
+            'rules' => $rules,
+            'locations' => $locations->values()->all(),
             'glpiConfigured' => $glpi->isConfigured(),
         ]);
     }
