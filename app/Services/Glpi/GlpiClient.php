@@ -1638,9 +1638,13 @@ class GlpiClient
         }
 
         return Cache::remember('glpi:locations', now()->addMinutes(30), function () {
-            $rows = $this->driver() === 'oauth'
-                ? ($this->oauthHttp()->get('/Dropdowns/Location', ['limit' => 1000])->json() ?? [])
-                : ($this->legacyHttp()->get('/Location', ['range' => '0-9999'])->json() ?? []);
+            // OJO: el /Dropdowns/Location de v2 NO devuelve `completename` (solo
+            // `name` + el padre inmediato), así que la ruta jerárquica se perdía
+            // y las ubicaciones salían como la hoja. El legacy /Location sí trae
+            // completename, por eso lo preferimos cuando hay tokens legacy.
+            $rows = $this->hasLegacyTokens()
+                ? ($this->legacyHttp()->get('/Location', ['range' => '0-9999'])->json() ?? [])
+                : ($this->oauthHttp()->get('/Dropdowns/Location', ['limit' => 1000])->json() ?? []);
 
             return collect($rows)
                 ->map(fn ($r) => [
