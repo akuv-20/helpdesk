@@ -74,4 +74,11 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::get('/conexion', [IntegrationController::class, 'edit'])->name('connection.edit');
     Route::put('/conexion', [IntegrationController::class, 'update'])->name('connection.update');
     Route::post('/conexion/probar', [IntegrationController::class, 'test'])->name('connection.test');
+
+    // Ubicaciones por IP — vincula segmentos de red con ubicaciones de GLPI
+    Route::get('/ubicaciones-ip', [\App\Http\Controllers\Admin\IpLocationController::class, 'index'])->name('ip-locations.index');
+    Route::post('/ubicaciones-ip', [\App\Http\Controllers\Admin\IpLocationController::class, 'store'])->name('ip-locations.store');
+    Route::put('/ubicaciones-ip/{rule}', [\App\Http\Controllers\Admin\IpLocationController::class, 'update'])->name('ip-locations.update');
+    Route::delete('/ubicaciones-ip/{rule}', [\App\Http\Controllers\Admin\IpLocationController::class, 'destroy'])->name('ip-locations.destroy');
+    Route::post('/ubicaciones-ip/probar', [\App\Http\Controllers\Admin\IpLocationController::class, 'test'])->name('ip-locations.test');
 });

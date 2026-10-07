@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Services\Glpi\GlpiClient;
 use App\Services\Glpi\GlpiException;
 use App\Services\Glpi\GlpiUserOAuth;
+use App\Services\Ip\IpLocationResolver;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -213,7 +214,7 @@ class TicketController extends Controller
             : 'Rechazo registrado. El equipo será notificado.';
     }
 
-    public function store(Request $request, GlpiClient $glpi): RedirectResponse
+    public function store(Request $request, GlpiClient $glpi, IpLocationResolver $ipLocations): RedirectResponse
     {
         $data = $request->validate([
             'type' => ['required', 'in:incident,request'],
@@ -226,12 +227,16 @@ class TicketController extends Controller
             'inline_images.*' => ['file', 'max:10240', 'mimes:jpg,jpeg,png,gif'],
         ]);
 
+        // Ubicación según la IP del solicitante (null si no matchea ninguna regla).
+        $location = $ipLocations->resolve($request->ip());
+
         try {
             $ticket = $glpi->createTicket([
                 'title' => $data['subject'],
                 'content' => $data['description'],
                 'type' => $data['type'],
                 'category_id' => $data['itil_category_id'],
+                'location_id' => $location['id'] ?? null,
                 'requester_name' => $request->user()->name,
                 'requester_timezone' => $request->user()->timezone,
                 'inline_images' => $request->file('inline_images', []),

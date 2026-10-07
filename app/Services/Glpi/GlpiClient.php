@@ -331,6 +331,8 @@ class GlpiClient
             'urgency' => 1,
             'impact' => 1,
             'itilcategories_id' => (int) ($data['category_id'] ?? 0),
+            // Ubicación derivada de la IP del solicitante (0 = sin ubicación).
+            'locations_id' => (int) ($data['location_id'] ?? 0),
             '_users_id_requester' => $userId,
             // "Abierto por"/Redactor = el solicitante, no la cuenta de servicio.
             // GLPI respeta users_id_recipient si viene explícito (solo lo
@@ -1182,6 +1184,7 @@ class GlpiClient
             'type' => (int) ($t['type'] ?? 0),
             'category' => $t['category']['name'] ?? null,
             'category_path' => $this->categoryPath($t['category'] ?? [], (int) ($t['itilcategories_id'] ?? 0)),
+            'location' => $this->ticketLocationName($t),
             'opened_at' => $this->fmtDate($t['date'] ?? null, 'd-m-Y H:i'),
             'updated_at' => $this->fmtDate($t['date_mod'] ?? null, 'd-m-Y H:i'),
             'requester' => $name($team->firstWhere('role', 'requester') ?? []),
@@ -1620,6 +1623,65 @@ class GlpiClient
                 'completename' => (string) ($r['completename'] ?? $r['name'] ?? ''),
             ])->filter(fn ($r) => $r['id'] > 0 && $r['completename'] !== '')->values()->all();
         });
+    }
+
+    /**
+     * Ubicaciones de GLPI (id + completename) para el mantenedor de reglas IP.
+     * Jerárquicas como las categorías; cacheadas 30 min. [] si no hay conexión.
+     *
+     * @return array<int, array{id:int, name:string}>
+     */
+    public function locations(): array
+    {
+        if (! $this->isConfigured()) {
+            return [];
+        }
+
+        return Cache::remember('glpi:locations', now()->addMinutes(30), function () {
+            $rows = $this->driver() === 'oauth'
+                ? ($this->oauthHttp()->get('/Dropdowns/Location', ['limit' => 1000])->json() ?? [])
+                : ($this->legacyHttp()->get('/Location', ['range' => '0-9999'])->json() ?? []);
+
+            return collect($rows)
+                ->map(fn ($r) => [
+                    'id' => (int) ($r['id'] ?? 0),
+                    'name' => (string) ($r['completename'] ?? $r['name'] ?? ''),
+                ])
+                ->filter(fn ($r) => $r['id'] > 0 && $r['name'] !== '')
+                ->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)
+                ->values()
+                ->all();
+        });
+    }
+
+    /** Nombre (completename) de una ubicación GLPI por id; null si no existe. */
+    public function locationName(int $id): ?string
+    {
+        if ($id <= 0) {
+            return null;
+        }
+
+        return collect($this->locations())->firstWhere('id', $id)['name'] ?? null;
+    }
+
+    /** Nombre de la ubicación de un ticket (v2 trae el objeto; si no, por id). */
+    protected function ticketLocationName(array $t): ?string
+    {
+        $loc = $t['location'] ?? null;
+        if (is_array($loc)) {
+            $name = $loc['completename'] ?? $loc['name'] ?? null;
+            if (filled($name)) {
+                return $name;
+            }
+            $id = (int) ($loc['id'] ?? 0);
+            if ($id > 0) {
+                return $this->locationName($id);
+            }
+        }
+
+        $id = (int) ($t['locations_id'] ?? 0);
+
+        return $id > 0 ? $this->locationName($id) : null;
     }
 
     /**

@@ -125,10 +125,23 @@ aprobaciones) pasan por `fmtDate`. **Si las horas se ven corridas, el valor a aj
    hoja). Escribe en el **GLPI compartido** (lo ven los técnicos); requiere que la cuenta legacy pueda crear
    ITILCategory (aquí super-admin). v1 = solo **agregar** (no renombrar/eliminar, ni crear Áreas de nivel superior).
 
+8. **Ubicaciones por IP (admin):** `/admin/ubicaciones-ip` (`Admin\IpLocationController` → `Admin/IpLocations/Index.vue`).
+   Vincula **segmentos de red (CIDR)** con **ubicaciones de GLPI** (`Location`, jerárquica como las categorías,
+   se listan con `GlpiClient::locations()`). Las reglas viven en la tabla local `ip_location_rules`
+   (`App\Models\IpLocationRule`: cidr, locations_id, location_name cacheado, label, enabled). Al **crear un
+   ticket**, `TicketController::store` toma `$request->ip()` y `App\Services\Ip\IpLocationResolver::resolve()`
+   devuelve la ubicación (match CIDR IPv4; si varias reglas matchean, gana el **prefijo más específico**; sin
+   match → sin ubicación). Ese `locations_id` se agrega al input legacy de `createTicket`. La UI permite
+   agregar/editar/activar reglas, un selector de ubicación GLPI y un **"probar IP"** (AJAX) que muestra qué
+   ubicación resolvería. El `normalizeCidr` acepta `192.168.32.0/24`, `192.168.32` (asume /24), `192.168.32.x/*`,
+   `/16`, etc. La ubicación resultante se muestra en el detalle del ticket (`Show.vue`, recuadro "Caso") además
+   de quedar en GLPI para los técnicos. **Requiere** que la IP real del cliente llegue al backend (detrás de
+   Apache+PHP-FPM, `REMOTE_ADDR` ya es la real; con un proxy/balanceador delante haría falta TrustProxies).
+
 **Admin:** middleware `admin` (`EnsureUserIsAdmin`) + `User::isAdmin()` (local dev-login o email en
 `config/ticket.php` `admins` / env `TICKET_ADMINS`). Navbar (`AppLayout.vue`): botón **recargar** (icono, `router.reload`)
 + **Aprobaciones** (con **badge** rojo de pendientes) + Home para todos; los mantenedores admin (Marca, Acceso, Explorar
-Entra, Categorías, GLPI, OAuth aprob.) van agrupados en un **menú desplegable "Administración"** (`adminLinks`) para no
+Entra, Categorías, Ubicaciones IP, GLPI, OAuth aprob.) van agrupados en un **menú desplegable "Administración"** (`adminLinks`) para no
 saturar la barra. El badge usa el prop global `pendingApprovalsCount` (compartido en `HandleInertiaRequests`,
 `GlpiClient::cachedPendingApprovalsCount` cacheado 60s por usuario; se invalida al responder una validación con
 `GlpiClient::forgetPendingApprovalsCount`). Las categorías del árbol/wizard se ordenan alfabéticamente por nombre en

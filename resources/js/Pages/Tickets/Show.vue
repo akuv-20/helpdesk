@@ -424,6 +424,12 @@ function respondValidation(action) {
                             </dd>
                             <dd v-else class="text-slate-400">—</dd>
                         </div>
+                        <div v-if="ticket.location">
+                            <dt class="mb-1 text-xs text-slate-400">Ubicación</dt>
+                            <dd>
+                                <EntityChip :label="ticket.location" variant="location" />
+                            </dd>
+                        </div>
                         <div>
                             <dt class="text-xs text-slate-400">Estado</dt>
                             <dd class="flex items-center gap-2 text-slate-700">

@@ -18,6 +18,7 @@ const ICONS = {
     technician: '<circle cx="12" cy="7" r="4"/><path d="M6 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/>',
     group: '<circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0-3-3.85"/>',
     category: '<path d="M7.5 7.5h.01"/><path d="M3 6v5.172a2 2 0 0 0 .586 1.414l7.71 7.71a2.41 2.41 0 0 0 3.408 0l4.592-4.592a2.41 2.41 0 0 0 0-3.408l-7.71-7.71A2 2 0 0 0 11.172 3H6a3 3 0 0 0-3 3z"/>',
+    location: '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/>',
     incident: '<path d="M12 9v4"/><path d="M10.363 3.591 2.257 17.125a2 2 0 0 0 1.72 3.006h16.046a2 2 0 0 0 1.72-3.006L13.637 3.591a2 2 0 0 0-3.274 0z"/><path d="M12 16h.01"/>',
     request: '<circle cx="12" cy="12" r="9"/><path d="M9 12h6"/><path d="M12 9v6"/>',
 };
@@ -28,6 +29,7 @@ const COLORS = {
     technician: 'text-teal-600',
     group: 'text-violet-600',
     category: 'text-amber-600',
+    location: 'text-rose-600',
     incident: 'text-orange-600',
     request: 'text-blue-600',
 };
