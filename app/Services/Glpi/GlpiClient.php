@@ -416,6 +416,32 @@ class GlpiClient
     }
 
     /**
+     * Id del creador REAL del ticket = "Abierto por" (users_id_recipient). Con
+     * varios solicitantes, este es el único dato fiable de quién lo creó (el
+     * team no distingue al creador del resto). El v2 a veces lo trae directo; si
+     * no, se lee por legacy, donde siempre viene. 0 si no se pudo determinar.
+     */
+    protected function ticketCreatorId(array $ticket, int $ticketId): int
+    {
+        $direct = (int) ($ticket['users_id_recipient'] ?? ($ticket['user_recipient']['id'] ?? 0));
+        if ($direct > 0) {
+            return $direct;
+        }
+
+        if ($ticketId > 0 && $this->hasLegacyTokens()) {
+            try {
+                $t = $this->legacyHttp()->get("/Ticket/{$ticketId}")->json();
+
+                return (int) ($t['users_id_recipient'] ?? 0);
+            } catch (\Throwable) {
+                // cae al fallback (firstWhere requester)
+            }
+        }
+
+        return 0;
+    }
+
+    /**
      * Mapa documents_id => users_id (autor del vínculo) de los adjuntos de un
      * ticket, por el API legacy. El API v2 no expone quién subió cada documento
      * en el timeline, así que resolvemos el autor con esto y no cae al fallback
@@ -1030,6 +1056,8 @@ class GlpiClient
             'opened_at' => $this->fmtDate($t['date'] ?? null, 'd-m-Y H:i'),
             'updated_at' => $this->fmtDate($t['date_mod'] ?? null, 'd-m-Y H:i'),
             'requester' => $name($team->firstWhere('role', 'requester') ?? []),
+            // TODOS los solicitantes (un ticket puede tener varios).
+            'requesters' => $team->where('role', 'requester')->where('type', 'User')->map($name)->filter()->unique()->values()->all(),
             'technicians' => $team->where('role', 'assigned')->where('type', 'User')->map($name)->filter()->values()->all(),
             'groups' => $team->where('role', 'assigned')->where('type', 'Group')->map($name)->filter()->values()->all(),
             'timeline' => $this->buildTimeline($t, $timeline),
@@ -1078,8 +1106,16 @@ class GlpiClient
         // desde el team o, si no está, por una consulta de usuario cacheada.
         $docUploaders = $this->documentUploaderIds($ticketId);
         $resolveName = fn (int $uid) => $people[$uid] ?? $this->resolveUserName($uid);
+        // Autor (nombre completo) de un seguimiento/solución a partir de su
+        // user {id,name}: resuelve el id REAL del autor (no el espectador) al
+        // nombre completo. Antes caía al name(=email) si no estaba en el team.
+        $authorFull = function ($u) use ($resolveName) {
+            $id = (int) ($u['id'] ?? 0);
 
-        $entries = collect($items)->map(function ($entry) use ($ticketId, $inlineDocIds, $authorOf, $docUploaders, $resolveName) {
+            return $id > 0 ? $resolveName($id) : ($u['name'] ?? null);
+        };
+
+        $entries = collect($items)->map(function ($entry) use ($ticketId, $inlineDocIds, $authorOf, $docUploaders, $resolveName, $authorFull) {
             $type = $entry['type'] ?? null;
             $item = $entry['item'] ?? [];
 
@@ -1094,7 +1130,7 @@ class GlpiClient
                 return [
                     '_date' => $item['date'] ?? $item['date_creation'] ?? '',
                     'kind' => $type === 'Solution' ? 'solution' : ($isRejection ? 'rejection' : 'followup'),
-                    'author' => $authorOf($item['user'] ?? []),
+                    'author' => $authorFull($item['user'] ?? []),
                     'content' => $this->sanitizeHtml($item['content'] ?? '', $ticketId),
                     'file' => null,
                     'doc_id' => null,
@@ -1170,12 +1206,24 @@ class GlpiClient
             }
         }
 
-        // Descripción original como la entrada más antigua (autor = solicitante).
+        // Descripción original como la entrada más antigua. El autor es el
+        // CREADOR real (users_id_recipient = "Abierto por"), no un solicitante
+        // cualquiera: con varios solicitantes firstWhere no distingue quién creó.
         $requester = collect($ticket['team'] ?? [])->firstWhere('role', 'requester') ?? [];
+        $creatorId = $this->ticketCreatorId($ticket, $ticketId);
+        // Solo se usa si el creador es uno de los solicitantes: así, si GLPI
+        // sobreescribió users_id_recipient con la cuenta de servicio, no sale
+        // "Usuario de Servicio" sino que cae al firstWhere de abajo.
+        $requesterIds = collect($ticket['team'] ?? [])
+            ->where('role', 'requester')->where('type', 'User')
+            ->pluck('id')->map(fn ($i) => (int) $i)->all();
+        $creatorName = ($creatorId > 0 && in_array($creatorId, $requesterIds, true))
+            ? ($people[$creatorId] ?? $this->resolveUserName($creatorId))
+            : null;
         $entries->push([
             '_date' => $ticket['date'] ?? '',
             'kind' => 'description',
-            'author' => $requester['display_name'] ?? $requester['name'] ?? null,
+            'author' => $creatorName ?? ($requester['display_name'] ?? $requester['name'] ?? null),
             'content' => $this->sanitizeHtml($ticket['content'] ?? '', $ticketId),
             'file' => null,
             'doc_id' => null,

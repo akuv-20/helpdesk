@@ -33,6 +33,7 @@ const canReply = computed(() => props.ticket.is_requester !== false && ![5, 6].i
 const statusLabel = computed(() => statusLabels[props.ticket.status] ?? 'En proceso');
 const dotColor = computed(() => statusDot[props.ticket.status] ?? 'bg-slate-400');
 const typeLabel = computed(() => (props.ticket.type === 1 ? 'Incidente' : 'Solicitud'));
+const requesters = computed(() => props.ticket.requesters ?? (props.ticket.requester ? [props.ticket.requester] : []));
 const technicians = computed(() => props.ticket.technicians ?? []);
 const groups = computed(() => props.ticket.groups ?? []);
 const hasAssignees = computed(() => technicians.value.length > 0 || groups.value.length > 0);
@@ -404,11 +405,11 @@ function respondValidation(action) {
                     <h2 class="mb-3 text-sm font-semibold text-slate-700">Actores</h2>
                     <dl class="space-y-3 text-sm">
                         <div>
-                            <dt class="mb-1 text-xs text-slate-400">Solicitante</dt>
-                            <dd>
-                                <EntityChip v-if="ticket.requester" :label="ticket.requester" variant="user" />
-                                <span v-else class="text-slate-400">—</span>
+                            <dt class="mb-1 text-xs text-slate-400">{{ requesters.length > 1 ? 'Solicitantes' : 'Solicitante' }}</dt>
+                            <dd v-if="requesters.length" class="flex flex-wrap gap-1.5">
+                                <EntityChip v-for="r in requesters" :key="'r-' + r" :label="r" variant="user" />
                             </dd>
+                            <span v-else class="text-slate-400">—</span>
                         </div>
                         <div>
                             <dt class="mb-1 text-xs text-slate-400">Asignado a</dt>
