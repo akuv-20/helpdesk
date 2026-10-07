@@ -15,6 +15,18 @@ const inputClass =
 const form = useForm({ cidr: '', locations_id: '', label: '', enabled: true });
 const editingId = ref(null); // null = creando; id = editando esa regla
 
+// Buscador de la tabla de reglas (filtra en el cliente por segmento/ubicación/nota).
+const ruleQuery = ref('');
+const filteredRules = computed(() => {
+    const q = ruleQuery.value.trim().toLowerCase();
+    if (!q) return props.rules;
+    return props.rules.filter((r) =>
+        (r.cidr ?? '').toLowerCase().includes(q)
+        || (r.location_name ?? '').toLowerCase().includes(q)
+        || (r.label ?? '').toLowerCase().includes(q),
+    );
+});
+
 // Combobox de ubicación: input con filtro en vez de un <select> largo.
 const locationQuery = ref('');
 const locationOpen = ref(false);
@@ -209,7 +221,19 @@ async function probar() {
         </div>
 
         <!-- Reglas existentes -->
-        <div v-if="rules.length" class="overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <template v-if="rules.length">
+            <div class="mb-3 flex items-center justify-between gap-3">
+                <input
+                    v-model="ruleQuery"
+                    type="search"
+                    placeholder="Buscar por segmento, ubicación o nota…"
+                    class="min-w-0 flex-1"
+                    :class="inputClass"
+                />
+                <span class="shrink-0 text-xs text-slate-400">{{ filteredRules.length }} de {{ rules.length }}</span>
+            </div>
+
+            <div v-if="filteredRules.length" class="overflow-hidden rounded-xl border border-slate-200 bg-white">
             <table class="w-full text-sm">
                 <thead class="bg-slate-50 text-left text-xs text-slate-500">
                     <tr>
@@ -222,7 +246,7 @@ async function probar() {
                 </thead>
                 <tbody class="divide-y divide-slate-100">
                     <tr
-                        v-for="rule in rules"
+                        v-for="rule in filteredRules"
                         :key="rule.id"
                         :class="[rule.enabled ? '' : 'opacity-50', editingId === rule.id ? 'bg-blue-50' : '']"
                     >
@@ -246,7 +270,11 @@ async function probar() {
                     </tr>
                 </tbody>
             </table>
-        </div>
+            </div>
+            <div v-else class="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-10 text-center text-sm text-slate-500">
+                Sin coincidencias.
+            </div>
+        </template>
         <div v-else class="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-10 text-center text-sm text-slate-500">
             Todavía no hay reglas. Agrega la primera arriba.
         </div>
