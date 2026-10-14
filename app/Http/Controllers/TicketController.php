@@ -71,7 +71,9 @@ class TicketController extends Controller
         $data = $request->validate([
             'content' => ['nullable', 'string', 'max:50000'],
             'attachments' => ['array', 'max:5'],
-            'attachments.*' => ['file', 'max:10240', 'mimes:jpg,jpeg,png,gif,pdf,doc,docx,xls,xlsx,txt,csv,zip'],
+            // Validación por EXTENSIÓN (no por mime): los correos .msg/.eml llegan
+            // con mime genérico (application/octet-stream) y 'mimes' los rechazaría.
+            'attachments.*' => ['file', 'max:10240', 'extensions:jpg,jpeg,png,gif,pdf,doc,docx,xls,xlsx,txt,csv,zip,eml,msg'],
             'inline_images' => ['array', 'max:10'],
             'inline_images.*' => ['file', 'max:10240', 'mimes:jpg,jpeg,png,gif'],
         ]);
@@ -222,7 +224,9 @@ class TicketController extends Controller
             'subject' => ['required', 'string', 'min:5', 'max:255'],
             'description' => ['required', 'string', 'max:50000'],
             'attachments' => ['array', 'max:5'],
-            'attachments.*' => ['file', 'max:10240', 'mimes:jpg,jpeg,png,gif,pdf,doc,docx,xls,xlsx,txt,csv,zip'],
+            // Validación por EXTENSIÓN (no por mime): los correos .msg/.eml llegan
+            // con mime genérico (application/octet-stream) y 'mimes' los rechazaría.
+            'attachments.*' => ['file', 'max:10240', 'extensions:jpg,jpeg,png,gif,pdf,doc,docx,xls,xlsx,txt,csv,zip,eml,msg'],
             'inline_images' => ['array', 'max:10'],
             'inline_images.*' => ['file', 'max:10240', 'mimes:jpg,jpeg,png,gif'],
         ]);

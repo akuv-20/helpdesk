@@ -6,6 +6,7 @@ import RichInput from '../../Components/RichInput.vue';
 import EntityChip from '../../Components/EntityChip.vue';
 import { compressImages } from '../../lib/compressImage';
 import { avatarColor } from '../../lib/avatarColor';
+import { ACCEPT_ATTR, ACCEPTED_LABEL, MAX_FILE_MB, fileExt, fileSize, validateFile } from '../../lib/attachments';
 
 const props = defineProps({
     ticket: { type: Object, required: true },
@@ -78,11 +79,7 @@ async function onFileChange(e) {
 function removeFile(i) {
     form.attachments = form.attachments.filter((_, idx) => idx !== i);
 }
-function fileSize(bytes) {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
-    return (bytes / 1024 / 1024).toFixed(1) + ' MB';
-}
+const allAttachmentsValid = computed(() => form.attachments.every((f) => validateFile(f).ok));
 function sendReply() {
     form.post(`/tickets/${props.ticket.id}/responder`, {
         preserveScroll: true,
@@ -308,31 +305,41 @@ function respondValidation(action) {
                         <input
                             type="file"
                             multiple
-                            accept=".jpg,.jpeg,.png,.gif,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv,.zip"
+                            :accept="ACCEPT_ATTR"
                             class="text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-4 file:py-2 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200"
                             @change="onFileChange"
                         />
                         <button
                             type="submit"
-                            :disabled="form.processing || compressing"
+                            :disabled="form.processing || compressing || !allAttachmentsValid"
                             class="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-60"
                         >
                             {{ form.processing ? 'Enviando…' : 'Enviar respuesta' }}
                         </button>
                     </div>
 
+                    <p class="mt-1 text-xs text-slate-400">Formatos: {{ ACCEPTED_LABEL }}. Hasta {{ MAX_FILE_MB }} MB c/u.</p>
                     <p v-if="compressing" class="mt-2 text-xs text-slate-500">Comprimiendo imágenes…</p>
 
-                    <ul v-if="form.attachments.length" class="mt-2 space-y-1">
+                    <ul v-if="form.attachments.length" class="mt-2 space-y-1.5">
                         <li
                             v-for="(f, i) in form.attachments"
                             :key="i"
-                            class="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-1.5 text-sm text-slate-700"
+                            class="flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm"
+                            :class="validateFile(f).ok ? 'border-slate-200 bg-slate-50 text-slate-700' : 'border-red-200 bg-red-50 text-red-700'"
                         >
-                            <span class="truncate">{{ f.name }} <span class="text-xs text-slate-400">({{ fileSize(f.size) }})</span></span>
-                            <button type="button" class="ml-3 shrink-0 text-xs text-red-500 hover:underline" @click="removeFile(i)">quitar</button>
+                            <span class="shrink-0 rounded bg-white px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-500 ring-1 ring-slate-200">{{ fileExt(f.name) || '?' }}</span>
+                            <span class="min-w-0 flex-1 truncate">{{ f.name }} <span class="text-xs text-slate-400">({{ fileSize(f.size) }})</span></span>
+                            <span v-if="validateFile(f).ok" class="shrink-0 text-green-600" title="Formato y tamaño correctos">
+                                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                            </span>
+                            <span v-else class="shrink-0 text-xs font-medium text-red-600">{{ validateFile(f).reason }}</span>
+                            <button type="button" class="shrink-0 text-slate-400 transition hover:text-red-600" :title="'Quitar ' + f.name" @click="removeFile(i)">
+                                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                            </button>
                         </li>
                     </ul>
+                    <p v-if="form.attachments.length && !allAttachmentsValid" class="mt-1 text-xs text-red-600">Quita o reemplaza los archivos marcados en rojo para poder enviar.</p>
                     <p v-if="form.errors.attachments" class="mt-1 text-xs text-red-600">{{ form.errors.attachments }}</p>
                 </form>
 
