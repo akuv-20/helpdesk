@@ -105,6 +105,45 @@ function back() {
     }
 }
 
+// Vuelve al menú de Tipo (paso 1).
+function goToType() {
+    form.itil_category_id = null;
+    path.value = [];
+    phase.value = 'type';
+}
+
+// Saltar a un paso YA recorrido desde el indicador de arriba (solo hacia atrás).
+function goToStep(i) {
+    const target = i + 1; // 1=Tipo, 2=Categoría, 3=Detalles
+    if (target >= stepNumber.value) return;
+    if (target === 1) {
+        goToType();
+    } else if (target === 2) {
+        // Si veníamos de Detalles, saca la hoja elegida y vuelve a navegar.
+        const last = path.value[path.value.length - 1];
+        if (last && !(last.children && last.children.length)) {
+            path.value = path.value.slice(0, -1);
+        }
+        form.itil_category_id = null;
+        phase.value = 'navigate';
+    }
+}
+
+// Saltar a un nivel desde las migas: contenedor → entra a sus hijos; hoja → sus hermanos.
+function goToCrumb(i) {
+    if (i === 0) {
+        goToType();
+        return;
+    }
+    const k = i - 1; // índice del nodo en path
+    const node = path.value[k];
+    path.value = (node.children && node.children.length)
+        ? path.value.slice(0, k + 1)
+        : path.value.slice(0, k);
+    form.itil_category_id = null;
+    phase.value = 'navigate';
+}
+
 function submit() {
     form.post('/tickets');
 }
@@ -117,19 +156,27 @@ const typeLabel = (v) => props.types.find((t) => t.value === v)?.label ?? '';
 
     <AppLayout>
         <div class="mb-6">
-            <Link href="/inicio" class="text-sm text-slate-500 hover:underline">← Volver</Link>
+            <Link href="/inicio" class="inline-flex items-center gap-1 text-sm font-medium text-slate-500 transition hover:text-slate-800 hover:underline">← Volver al inicio</Link>
             <h1 class="mt-2 text-xl font-semibold text-slate-900">Nuevo ticket</h1>
-            <p class="text-sm text-slate-500">Te guiamos en unos pocos pasos.</p>
+            <p class="text-sm text-slate-500">Te guiamos en unos pocos pasos. Puedes volver tocando un paso o una categoría de arriba.</p>
         </div>
 
-        <!-- Indicador de pasos -->
+        <!-- Indicador de pasos (los ya recorridos son clicables para volver) -->
         <ol class="mb-6 flex items-center gap-2 text-xs font-medium">
             <li v-for="(label, i) in steps" :key="i" class="flex items-center gap-2">
-                <span
-                    class="grid h-6 w-6 place-items-center rounded-full"
-                    :class="stepNumber >= i + 1 ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-500'"
-                >{{ i + 1 }}</span>
-                <span :class="stepNumber >= i + 1 ? 'text-slate-900' : 'text-slate-400'">{{ label }}</span>
+                <button
+                    type="button"
+                    class="flex items-center gap-2 rounded-full transition"
+                    :class="(i + 1) < stepNumber ? 'cursor-pointer' : 'cursor-default'"
+                    :disabled="(i + 1) >= stepNumber"
+                    @click="goToStep(i)"
+                >
+                    <span
+                        class="grid h-6 w-6 place-items-center rounded-full"
+                        :class="stepNumber >= i + 1 ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-500'"
+                    >{{ i + 1 }}</span>
+                    <span :class="[stepNumber >= i + 1 ? 'text-slate-900' : 'text-slate-400', (i + 1) < stepNumber ? 'hover:underline' : '']">{{ label }}</span>
+                </button>
                 <span v-if="i < steps.length - 1" class="mx-1 h-px w-6 bg-slate-200"></span>
             </li>
         </ol>
@@ -145,11 +192,15 @@ const typeLabel = (v) => props.types.find((t) => t.value === v)?.label ?? '';
             para usar las categorías reales.
         </div>
 
-        <!-- Migas: tipo + camino recorrido -->
+        <!-- Migas: tipo + camino recorrido (clicables para volver a ese nivel) -->
         <div v-if="phase !== 'type'" class="mb-4 flex flex-wrap items-center gap-1.5 text-xs">
             <template v-for="(crumb, i) in crumbs" :key="i">
                 <span v-if="i > 0" class="text-slate-300">›</span>
-                <span class="rounded-full bg-slate-100 px-3 py-1 text-slate-600">{{ crumb }}</span>
+                <button
+                    type="button"
+                    class="rounded-full bg-slate-100 px-3 py-1 font-medium text-slate-600 transition hover:bg-blue-100 hover:text-blue-700"
+                    @click="goToCrumb(i)"
+                >{{ crumb }}</button>
             </template>
         </div>
 
@@ -192,8 +243,13 @@ const typeLabel = (v) => props.types.find((t) => t.value === v)?.label ?? '';
                 </button>
             </div>
 
-            <button type="button" class="mt-4 text-sm text-slate-500 hover:underline" @click="back">
-                ← {{ path.length ? 'Atrás' : 'Cambiar tipo' }}
+            <button
+                type="button"
+                class="mt-5 inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                @click="back"
+            >
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                {{ path.length ? 'Atrás' : 'Cambiar tipo' }}
             </button>
         </div>
 
@@ -260,7 +316,14 @@ const typeLabel = (v) => props.types.find((t) => t.value === v)?.label ?? '';
             </div>
 
             <div class="flex items-center justify-between pt-2">
-                <button type="button" class="text-sm text-slate-500 hover:underline" @click="back">← Cambiar categoría</button>
+                <button
+                    type="button"
+                    class="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                    @click="back"
+                >
+                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+                    Cambiar categoría
+                </button>
                 <button
                     type="submit"
                     :disabled="form.processing || compressing || !allAttachmentsValid"
