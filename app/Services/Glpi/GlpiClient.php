@@ -901,10 +901,15 @@ class GlpiClient
      *
      * El token se obtiene con el flujo authorization_code (ver GlpiUserOAuth).
      */
-    public function respondValidationWithToken(string $userAccessToken, int $ticketId, string $action, ?string $comment = null): void
+    public function respondValidationWithToken(string $userAccessToken, int $ticketId, string $action, string $approverEmail, ?string $comment = null): void
     {
         if ($action === 'reject' && blank($comment)) {
             throw new GlpiException('Indica un motivo para rechazar la aprobación.');
+        }
+
+        $userId = $this->findUserId($approverEmail);
+        if ($userId === null) {
+            throw new GlpiException('No encontramos tu usuario en GLPI.');
         }
 
         // Cliente v2 autenticado COMO EL USUARIO (su propio bearer token).
@@ -914,11 +919,16 @@ class GlpiClient
             ->withOptions(['verify' => $this->config['verify']])
             ->baseUrl($this->config['oauth']['api_url']);
 
-        // Su validación pendiente (status 2) en el ticket.
+        // SU validación pendiente (status 2) en el ticket. Un ticket puede tener
+        // varias validaciones pendientes para distintas personas: hay que tomar
+        // la asignada a él (GLPI ignora en silencio el PATCH sobre una ajena).
         $vals = $http->get("/Assistance/Ticket/{$ticketId}/Timeline/Validation")->json();
         $pending = collect(is_array($vals) ? $vals : [])
             ->map(fn ($e) => $e['item'] ?? [])
-            ->first(fn ($v) => is_array($v) && (int) ($v['status'] ?? 0) === 2);
+            ->first(fn ($v) => is_array($v)
+                && (int) ($v['status'] ?? 0) === 2
+                && ($v['requested_approver_type'] ?? null) === 'User'
+                && (int) ($v['requested_approver_id'] ?? 0) === $userId);
 
         if (! $pending) {
             throw new GlpiException('No tienes una aprobación pendiente en este ticket.');

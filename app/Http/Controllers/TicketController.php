@@ -145,7 +145,7 @@ class TicketController extends Controller
         // primera vez (o si el refresh caducó) redirigimos para autorizar.
         if ($token = $this->currentGlpiToken($request->user(), $oauth)) {
             try {
-                $glpi->respondValidationWithToken($token, $id, $data['action'], $data['comment'] ?? null);
+                $glpi->respondValidationWithToken($token, $id, $data['action'], $request->user()->email, $data['comment'] ?? null);
             } catch (GlpiException $e) {
                 return back()->with('error', $e->getMessage());
             }
@@ -178,7 +178,7 @@ class TicketController extends Controller
             $request->user()->storeGlpiTokens($tokens);
 
             $ticketId = (int) ($intent['ticket'] ?? 0);
-            $glpi->respondValidationWithToken($tokens['access'], $ticketId, $intent['action'] ?? '', $intent['comment'] ?? null);
+            $glpi->respondValidationWithToken($tokens['access'], $ticketId, $intent['action'] ?? '', $request->user()->email, $intent['comment'] ?? null);
             GlpiClient::forgetPendingApprovalsCount($request->user()->id);
         } catch (GlpiException $e) {
             $ticketId = $intent['ticket'] ?? null;
