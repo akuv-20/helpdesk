@@ -81,4 +81,9 @@ Route::middleware(['auth', 'enabled', 'admin'])->prefix('admin')->name('admin.')
     Route::put('/ubicaciones-ip/{rule}', [\App\Http\Controllers\Admin\IpLocationController::class, 'update'])->name('ip-locations.update');
     Route::delete('/ubicaciones-ip/{rule}', [\App\Http\Controllers\Admin\IpLocationController::class, 'destroy'])->name('ip-locations.destroy');
     Route::post('/ubicaciones-ip/probar', [\App\Http\Controllers\Admin\IpLocationController::class, 'test'])->name('ip-locations.test');
+
+    // Importación de usuarios Entra ID → GLPI (de a uno o masiva, por filtros)
+    Route::get('/usuarios-entra', [\App\Http\Controllers\Admin\EntraImportController::class, 'index'])->name('entra-import.index');
+    Route::post('/usuarios-entra/directorio', [\App\Http\Controllers\Admin\EntraImportController::class, 'directory'])->name('entra-import.directory');
+    Route::post('/usuarios-entra/importar', [\App\Http\Controllers\Admin\EntraImportController::class, 'import'])->name('entra-import.import');
 });

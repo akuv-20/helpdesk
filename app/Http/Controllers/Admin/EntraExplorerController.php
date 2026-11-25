@@ -3,10 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Services\Auth\EntraConfig;
-use App\Services\Settings\Settings;
+use App\Services\Entra\EntraGraph;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Http;
 use Inertia\Inertia;
 use Inertia\Response;
 use Illuminate\Http\Request;
@@ -26,7 +24,7 @@ class EntraExplorerController extends Controller
     /** Set amplio de propiedades estándar, precargado para explorar. */
     private const SUGGESTED_SELECT = 'displayName,givenName,surname,userPrincipalName,mail,id,jobTitle,department,companyName,officeLocation,city,state,country,usageLocation,preferredLanguage,mobilePhone,businessPhones,employeeId,employeeType,streetAddress,postalCode,accountEnabled,userType,onPremisesSamAccountName,createdDateTime';
 
-    public function __construct(private Settings $settings)
+    public function __construct(private EntraGraph $graph)
     {
     }
 
@@ -49,9 +47,7 @@ class EntraExplorerController extends Controller
             'select' => ['nullable', 'string', 'max:4000'],
         ]);
 
-        $cfg = EntraConfig::resolve($this->settings);
-
-        if (blank($cfg['client_id']) || blank($cfg['client_secret']) || blank($cfg['tenant'])) {
+        if (! $this->graph->isConfigured()) {
             return response()->json([
                 'ok' => false,
                 'message' => 'Faltan Client ID, Client Secret o Tenant en la configuración de Entra (/admin/acceso).',
@@ -59,7 +55,7 @@ class EntraExplorerController extends Controller
         }
 
         try {
-            $token = $this->graphAppToken($cfg);
+            $http = $this->graph->http(15);
         } catch (\Throwable $e) {
             return response()->json(['ok' => false, 'message' => $e->getMessage()]);
         }
@@ -72,10 +68,7 @@ class EntraExplorerController extends Controller
             $query['$select'] = $select;
         }
 
-        $resp = Http::withToken($token)
-            ->acceptJson()
-            ->timeout(15)
-            ->get('https://graph.microsoft.com/v1.0/users/'.rawurlencode($upn), $query);
+        $resp = $http->get('/users/'.rawurlencode($upn), $query);
 
         return response()->json([
             'ok' => $resp->successful(),
@@ -83,30 +76,6 @@ class EntraExplorerController extends Controller
             'requestedSelect' => $select,
             'data' => $resp->json(),
         ]);
-    }
-
-    /** Token de aplicación (client_credentials) para Graph, cacheado ~50 min. */
-    private function graphAppToken(array $cfg): string
-    {
-        return \Illuminate\Support\Facades\Cache::remember('entra:graph_app_token', now()->addMinutes(50), function () use ($cfg) {
-            $resp = Http::asForm()->timeout(15)->post(
-                "https://login.microsoftonline.com/{$cfg['tenant']}/oauth2/v2.0/token",
-                [
-                    'grant_type' => 'client_credentials',
-                    'client_id' => $cfg['client_id'],
-                    'client_secret' => $cfg['client_secret'],
-                    'scope' => 'https://graph.microsoft.com/.default',
-                ]
-            );
-
-            if ($resp->failed()) {
-                $desc = $resp->json('error_description') ?? $resp->body();
-
-                throw new \RuntimeException('No se pudo obtener token de Graph: '.mb_substr((string) $desc, 0, 300));
-            }
-
-            return (string) $resp->json('access_token');
-        });
     }
 
     /**

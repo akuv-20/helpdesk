@@ -25,6 +25,7 @@ const adminLinks = [
     { href: '/admin/explorador-entra', label: 'Explorar Entra' },
     { href: '/admin/categorias', label: 'Categorías' },
     { href: '/admin/ubicaciones-ip', label: 'Ubicaciones IP' },
+    { href: '/admin/usuarios-entra', label: 'Usuarios Entra' },
     { href: '/admin/conexion', label: 'GLPI' },
     { href: '/admin/aprobaciones-oauth', label: 'OAuth aprob.' },
 ];

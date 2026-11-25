@@ -40,7 +40,9 @@ Tras el aviso, el botón pasa a "Ingresar con otra cuenta" (`/auth/entra/redirec
 normal NO fuerza el selector: con una sola cuenta entra directo (con varias, Entra ya pregunta).
 
 **Zona horaria:** en el login se pide el campo `country` a Graph (`config services.microsoft.fields`) y
-`EntraController::timezoneFromCountry()` la deriva (CL/Chile→America/Santiago, PE/Perú→America/Lima),
+`App\Services\Entra\Country::timezone()` la deriva (normaliza el país sucio de Entra: CL/CHILE/"Unifrutti Chile"→
+America/Santiago, PE/Perú/"Per�"→America/Lima, y además South Africa, Philippines, Japón, Italia, Emiratos). **Es la
+misma regla que usa la importación de usuarios (módulo 9)**,
 guardándola en `users.timezone` (se actualiza en cada login). Hacia GLPI va por dos vías: en el **alta JIT**
 (`legacyCreateUser`, solo usuarios nuevos) y en **cada login** vía `GlpiClient::ensureUserTimezone()`, que la
 completa **solo si el usuario en GLPI la tiene vacía** (los creados por SAML no la traen); si ya tiene una, no
@@ -147,10 +149,33 @@ aprobaciones) pasan por `fmtDate`. **Si las horas se ven corridas, el valor a aj
    de quedar en GLPI para los técnicos. **Requiere** que la IP real del cliente llegue al backend (detrás de
    Apache+PHP-FPM, `REMOTE_ADDR` ya es la real; con un proxy/balanceador delante haría falta TrustProxies).
 
+9. **Importación de usuarios Entra → GLPI (admin):** `/admin/usuarios-entra` (`Admin\EntraImportController` →
+   `Admin/EntraImport/Index.vue`, lógica en `App\Services\Entra\EntraUserImport`). Fase 1 de "Entra → GLPI →
+   inventario" (fase 2 = sync programado, fase 3 = asignar usuarios a equipos por el `contact` del agente, que llega
+   como `usuario@UNIFRUTTI`). GLPI **no tiene LDAP** y las cuentas son solo-nube → se hace por Graph (permiso de
+   aplicación `User.Read.All`, `App\Services\Entra\EntraGraph`, compartido con el Explorador).
+   - Se baja el directorio **completo** (~6.300 usuarios, ~11 s) y se cachea 30 min (`entra:directory`); los filtros
+     (país, dominio, departamento, texto, estado GLPI, solo habilitados/con nombre/con buzón) van **en memoria**,
+     porque Entra viene sucio: país normalizado (`normalizeCountry`: CL/CHILE/"Unifrutti Chile"→Chile, PE/Perú/"Per�"→Perú…),
+     MAYÚSCULAS → "Nombre del Apellido" y rellenos ("0", "(en blanco)") → vacío (`clean`). Valores con caracteres
+     **dañados en Entra** (U+FFFD, p.ej. "LABRA�A") **no se escriben** y se avisa.
+   - Cruce con GLPI: vínculo guardado (`entra_user_links`, object id ↔ id GLPI) → correo (`mail`) → UPN (difieren en
+     ~2.000 cuentas). Índice de usuarios GLPI por legacy (`GlpiClient::userIndex`, `/User` + `/UserEmail`).
+   - Alta: login = correo (como el resto del portal), nombre/apellidos, móvil, teléfono, n° de empleado, **cargo →
+     `UserTitle`** y **departamento → `UserCategory`** (desplegables, se crean si faltan, `dropdownId`). Solo cuentas
+     **habilitadas y miembro** (no invitados). Tras crear, `ensureDefaultProfile` asigna el perfil por defecto
+     (Self-Service) si GLPI no le puso ninguno (había usuarios sin perfil).
+   - **Zona horaria** por país (`Country::timezone`, igual que el login): en el alta siempre; en existentes **solo si en
+     GLPI está vacía** (como `ensureUserTimezone`). Sin país en Entra (~2.700 cuentas) → sin zona.
+   - Actualización (opcional): solo campos que en Entra traen dato y cambiaron. **Nunca reactiva** a alguien
+     deshabilitado en GLPI (las genéricas se desactivan ahí); si Entra lo tiene deshabilitado, sí lo desactiva.
+   - **Simular** (dry-run, no escribe) muestra los cambios campo a campo. La importación masiva la conduce el
+     navegador en lotes de 20 (`/usuarios-entra/importar`), sin colas ni worker.
+
 **Admin:** middleware `admin` (`EnsureUserIsAdmin`) + `User::isAdmin()` (local dev-login o email en
 `config/ticket.php` `admins` / env `TICKET_ADMINS`). Navbar (`AppLayout.vue`): botón **recargar** (icono, `router.reload`)
 + **Aprobaciones** (con **badge** rojo de pendientes) + Home para todos; los mantenedores admin (Marca, Acceso, Explorar
-Entra, Categorías, Ubicaciones IP, GLPI, OAuth aprob.) van agrupados en un **menú desplegable "Administración"** (`adminLinks`) para no
+Entra, Categorías, Ubicaciones IP, Usuarios Entra, GLPI, OAuth aprob.) van agrupados en un **menú desplegable "Administración"** (`adminLinks`) para no
 saturar la barra. El badge usa el prop global `pendingApprovalsCount` (compartido en `HandleInertiaRequests`,
 `GlpiClient::cachedPendingApprovalsCount` cacheado 60s por usuario; se invalida al responder una validación con
 `GlpiClient::forgetPendingApprovalsCount`). Las categorías del árbol/wizard se ordenan alfabéticamente por nombre en
@@ -199,5 +224,5 @@ un campo nativo y filtrable. Si en el futuro se necesitan campos extra, habría 
 composer install && npm install   # en el server de prod: php8.4 /usr/local/bin/composer install
 php artisan migrate          # sin seeders: las categorías viven en GLPI
 npm run dev                  # o npm run build
-php artisan test             # 33 tests (PortalFlow, IntegrationModule, Entra, Branding, DisabledUser)
+php artisan test             # 46 tests (PortalFlow, IntegrationModule, Entra, Branding, DisabledUser, EntraImport)
 ```

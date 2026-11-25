@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use App\Services\Auth\EntraConfig;
+use App\Services\Entra\Country;
 use App\Services\Glpi\GlpiClient;
 use App\Services\Settings\Settings;
 use Illuminate\Support\Facades\Auth;
@@ -75,9 +76,10 @@ class EntraController extends Controller
             return redirect()->route('login')->with('disabledUser', $email);
         }
 
-        // Zona horaria derivada del país que entrega Entra (campo country).
+        // Zona horaria derivada del país que entrega Entra (campo country). Misma
+        // regla que la importación de usuarios a GLPI (App\Services\Entra\Country).
         $raw = (array) ($entraUser->user ?? []);
-        $timezone = $this->timezoneFromCountry($raw['country'] ?? null);
+        $timezone = Country::timezone($raw['country'] ?? null);
 
         $attributes = [
             'name' => $entraUser->getName() ?: $email,
@@ -99,31 +101,6 @@ class EntraController extends Controller
         Auth::login($user, remember: true);
 
         return redirect()->intended(route('dashboard'));
-    }
-
-    /**
-     * Deriva la zona horaria IANA a partir del campo `country` de Entra (puede
-     * venir "Chile"/"CL" o "Peru"/"Perú"/"PE"). Devuelve null si viene vacío o
-     * el país no está en el mapa: en ese caso no se define/toca la zona.
-     */
-    private function timezoneFromCountry(?string $country): ?string
-    {
-        // Normaliza: mayúsculas, sin espacios ni acentos ("Perú" -> "PERU").
-        $key = mb_strtoupper(trim((string) $country));
-        $key = strtr($key, ['Á' => 'A', 'É' => 'E', 'Í' => 'I', 'Ó' => 'O', 'Ú' => 'U']);
-
-        if ($key === '') {
-            return null;
-        }
-
-        $map = [
-            'CL' => 'America/Santiago',
-            'CHILE' => 'America/Santiago',
-            'PE' => 'America/Lima',
-            'PERU' => 'America/Lima',
-        ];
-
-        return $map[$key] ?? null;
     }
 
     /** Acceso de desarrollo: sólo en local y si se habilita explícitamente. */

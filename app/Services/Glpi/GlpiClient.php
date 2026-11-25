@@ -6,6 +6,7 @@ use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 /**
  * Cliente del backend (BFF) contra la API de GLPI 11.
@@ -1810,6 +1811,183 @@ class GlpiClient
     }
 
     /* ===================================================================
+     |  Importación de usuarios desde Entra (admin) — todo por legacy
+     * =================================================================== */
+
+    /** ¿Se puede escribir usuarios en GLPI (hay tokens legacy)? */
+    public function canWriteUsers(): bool
+    {
+        return $this->isConfigured() && $this->hasLegacyTokens();
+    }
+
+    /**
+     * Índice de TODOS los usuarios de GLPI para cruzarlos con Entra: por id
+     * (con los campos que la importación compara) y por correo en minúsculas
+     * (login con @ + los de glpi_useremails). Cacheado 2 min; se invalida al
+     * crear/actualizar (forgetUserIndex).
+     *
+     * @return array{users: array<int, array<string, mixed>>, byEmail: array<string, int>}
+     */
+    public function userIndex(): array
+    {
+        $this->requireLegacy();
+
+        return Cache::remember('glpi:user_index', now()->addMinutes(2), function () {
+            $users = [];
+            foreach ($this->legacyAll('/User') as $u) {
+                $users[(int) $u['id']] = [
+                    'id' => (int) $u['id'],
+                    'login' => (string) ($u['name'] ?? ''),
+                    'firstname' => (string) ($u['firstname'] ?? ''),
+                    'realname' => (string) ($u['realname'] ?? ''),
+                    'mobile' => (string) ($u['mobile'] ?? ''),
+                    'phone' => (string) ($u['phone'] ?? ''),
+                    'registration_number' => (string) ($u['registration_number'] ?? ''),
+                    'timezone' => (string) ($u['timezone'] ?? ''),
+                    'usertitles_id' => (int) ($u['usertitles_id'] ?? 0),
+                    'usercategories_id' => (int) ($u['usercategories_id'] ?? 0),
+                    'is_active' => (bool) ($u['is_active'] ?? true),
+                    'is_deleted' => (bool) ($u['is_deleted'] ?? false),
+                ];
+            }
+
+            $byEmail = [];
+            foreach ($users as $u) {
+                if (str_contains($u['login'], '@')) {
+                    $byEmail[mb_strtolower($u['login'])] = $u['id'];
+                }
+            }
+            foreach ($this->legacyAll('/UserEmail') as $e) {
+                $email = mb_strtolower((string) ($e['email'] ?? ''));
+                $uid = (int) ($e['users_id'] ?? 0);
+                if ($email !== '' && isset($users[$uid])) {
+                    $byEmail[$email] ??= $uid;
+                }
+            }
+
+            return ['users' => $users, 'byEmail' => $byEmail];
+        });
+    }
+
+    public function forgetUserIndex(): void
+    {
+        Cache::forget('glpi:user_index');
+    }
+
+    /**
+     * Nombres de un desplegable simple de GLPI (UserTitle, UserCategory…) por id.
+     * Cacheado 10 min; se invalida al crear uno nuevo.
+     *
+     * @return array<int, string>
+     */
+    public function dropdownNames(string $itemtype): array
+    {
+        $this->requireLegacy();
+
+        return Cache::remember("glpi:dropdown:{$itemtype}", now()->addMinutes(10), fn () => collect($this->legacyAll("/{$itemtype}"))
+            ->mapWithKeys(fn ($r) => [(int) $r['id'] => (string) ($r['name'] ?? '')])
+            ->all());
+    }
+
+    /**
+     * Id del valor $name en el desplegable (comparación sin mayúsculas/espacios
+     * extra). Si no existe y $create, lo crea. null si no hay nombre o no se pudo.
+     */
+    public function dropdownId(string $itemtype, ?string $name, bool $create = true): ?int
+    {
+        $name = trim((string) $name);
+        if ($name === '') {
+            return null;
+        }
+
+        $key = mb_strtolower($name);
+        foreach ($this->dropdownNames($itemtype) as $id => $existing) {
+            if (mb_strtolower(trim($existing)) === $key) {
+                return $id;
+            }
+        }
+
+        if (! $create) {
+            return null;
+        }
+
+        $resp = $this->legacyHttp()->post("/{$itemtype}", ['input' => ['name' => $name]]);
+        Cache::forget("glpi:dropdown:{$itemtype}");
+
+        return $resp->successful() ? ((int) $resp->json('id') ?: null) : null;
+    }
+
+    /**
+     * Da de alta un usuario importado desde Entra (login = email) con los campos
+     * extra ya resueltos a ids de GLPI. Devuelve el id o lanza GlpiException.
+     *
+     * @param  array<string, mixed>  $input  firstname, realname, mobile, phone, usertitles_id…
+     */
+    public function createImportedUser(string $email, array $input): int
+    {
+        $this->requireLegacy();
+
+        $id = $this->legacyCreateUser($email, null, null, $input);
+        if ($id === null) {
+            throw new GlpiException("GLPI rechazó el alta de {$email}.");
+        }
+
+        Cache::forget($this->userIdCacheKey($email));
+        $this->forgetUserIndex();
+
+        return $id;
+    }
+
+    /** Actualiza campos de un usuario existente en GLPI. Lanza GlpiException si falla. */
+    public function updateImportedUser(int $userId, array $input): void
+    {
+        $this->requireLegacy();
+
+        $resp = $this->legacyHttp()->put("/User/{$userId}", ['input' => ['id' => $userId] + $input]);
+        if ($resp->failed()) {
+            throw new GlpiException("GLPI rechazó la actualización del usuario #{$userId} ({$resp->status()}).");
+        }
+
+        $this->forgetUserIndex();
+    }
+
+    /**
+     * Baja TODOS los registros de un itemtype por legacy, paginando con range
+     * (GLPI corta en 1000 por página) hasta completar el total de Content-Range.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    protected function legacyAll(string $path, int $pageSize = 1000): array
+    {
+        $rows = [];
+        for ($start = 0; ; $start += $pageSize) {
+            $resp = $this->legacyHttp()->get($path, [
+                'range' => $start.'-'.($start + $pageSize - 1),
+                'expand_dropdowns' => 0,
+            ]);
+
+            $page = $resp->json();
+            if (! $resp->successful() || ! is_array($page)) {
+                break;
+            }
+
+            foreach ($page as $r) {
+                if (is_array($r) && isset($r['id'])) {
+                    $rows[] = $r;
+                }
+            }
+
+            // Content-Range: "0-999/1234" → seguimos solo si quedan más.
+            $total = (int) Str::afterLast((string) $resp->header('Content-Range'), '/');
+            if (count($page) < $pageSize || $start + $pageSize >= $total) {
+                break;
+            }
+        }
+
+        return $rows;
+    }
+
+    /* ===================================================================
      |  Resolución de usuario (mapeo Entra -> GLPI)
      * =================================================================== */
 
@@ -2005,20 +2183,21 @@ class GlpiClient
      * id creado, o null si GLPI rechazó el alta. No lanza excepción: si el alta
      * falla, createTicket ya reporta un error claro al usuario.
      */
-    protected function legacyCreateUser(string $email, ?string $name, ?string $timezone = null): ?int
+    protected function legacyCreateUser(string $email, ?string $name, ?string $timezone = null, array $extra = []): ?int
     {
         [$firstname, $realname] = $this->splitName($name);
 
         // login = email (como SAML en esta instancia). is_active para que GLPI
         // lo acepte como solicitante y le pueda notificar. La timezone (IANA)
         // solo se envía si viene; requiere zonas habilitadas en la BD de GLPI.
-        $resp = $this->legacyHttp()->post('/User', ['input' => array_filter([
+        // $extra (importación desde Entra) agrega/pisa campos: cargo, teléfonos…
+        $resp = $this->legacyHttp()->post('/User', ['input' => array_filter(array_merge([
             'name' => $email,
             'firstname' => $firstname,
             'realname' => $realname,
             'timezone' => $timezone,
             'is_active' => 1,
-        ], fn ($v) => $v !== null && $v !== '')]);
+        ], $extra), fn ($v) => $v !== null && $v !== '')]);
 
         if ($resp->failed()) {
             Log::error('GLPI: no se pudo crear el usuario (JIT)', [
@@ -2050,7 +2229,40 @@ class GlpiClient
             ]);
         }
 
+        $this->ensureDefaultProfile($userId);
+
         return $userId;
+    }
+
+    /**
+     * GLPI suele asignar solo el perfil por defecto (Self-Service, entidad raíz)
+     * al crear un usuario, pero no siempre (hay altas que quedaron sin perfil y
+     * entonces no pueden entrar a GLPI). Si quedó sin ninguno, se lo asignamos.
+     */
+    protected function ensureDefaultProfile(int $userId): void
+    {
+        try {
+            $current = $this->legacyHttp()->get("/User/{$userId}/Profile_User")->json();
+            if (is_array($current) && $current !== []) {
+                return;
+            }
+
+            $profiles = (array) $this->legacyHttp()->get('/Profile', ['range' => '0-99'])->json();
+            $default = collect($profiles)->first(fn ($p) => is_array($p) && ! empty($p['is_default']));
+            if (! $default) {
+                return;
+            }
+
+            $this->legacyHttp()->post('/Profile_User', ['input' => [
+                'users_id' => $userId,
+                'profiles_id' => (int) $default['id'],
+                'entities_id' => 0,
+            ]]);
+        } catch (\Throwable $e) {
+            Log::warning('GLPI: no se pudo asignar el perfil por defecto', [
+                'users_id' => $userId, 'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
