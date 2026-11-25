@@ -29,7 +29,7 @@ Route::post('/logout', [EntraController::class, 'logout'])->name('logout');
 /*
 | Portal del usuario (requiere sesión)
 */
-Route::middleware('auth')->group(function () {
+Route::middleware(['auth', 'enabled'])->group(function () {
     Route::get('/inicio', DashboardController::class)->name('dashboard');
     Route::get('/aprobaciones', ApprovalController::class)->name('approvals');
 
@@ -48,7 +48,7 @@ Route::middleware('auth')->group(function () {
 /*
 | Administración — mantenedores de ambos OAuth (solo admins)
 */
-Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(function () {
+Route::middleware(['auth', 'enabled', 'admin'])->prefix('admin')->name('admin.')->group(function () {
     // Mantenedor de marca (logos, favicon, fondo del login)
     Route::get('/marca', [BrandingController::class, 'edit'])->name('branding.edit');
     Route::put('/marca', [BrandingController::class, 'update'])->name('branding.update');

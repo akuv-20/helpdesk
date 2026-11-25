@@ -4,6 +4,7 @@ import { computed } from 'vue';
 
 const page = usePage();
 const flashError = computed(() => page.props.flash?.error);
+const disabledUser = computed(() => page.props.flash?.disabledUser);
 const branding = computed(() => page.props.branding ?? {});
 const appName = computed(() => page.props.appName ?? 'HelpDesk Unifrutti');
 
@@ -48,6 +49,22 @@ function devLogin() {
             </div>
 
             <div
+                v-if="disabledUser"
+                role="alert"
+                class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+            >
+                <p class="font-semibold">Usuario deshabilitado</p>
+                <p class="mt-1">
+                    El usuario <span class="font-medium break-all">{{ disabledUser }}</span> está deshabilitado.
+                    Por favor, contacta al departamento de TI.
+                </p>
+                <p class="mt-2 text-xs text-red-700">
+                    Si entraste con una cuenta que no es la tuya, vuelve a ingresar y elige tu cuenta personal
+                    (o "Usar otra cuenta").
+                </p>
+            </div>
+
+            <div
                 v-if="flashError"
                 class="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
             >
@@ -55,11 +72,14 @@ function devLogin() {
             </div>
 
             <a
-                href="/auth/entra/redirect"
+                :href="disabledUser ? '/auth/entra/redirect?otra=1' : '/auth/entra/redirect'"
                 class="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-3 font-medium text-white shadow-sm transition hover:bg-blue-700"
             >
-                Ingresar con tu cuenta corporativa
+                {{ disabledUser ? 'Ingresar con otra cuenta' : 'Ingresar con tu cuenta corporativa' }}
             </a>
+            <p v-if="disabledUser" class="mt-2 text-center text-xs text-slate-400">
+                Podrás elegir con qué cuenta de Microsoft ingresar.
+            </p>
 
             <button
                 v-if="allowDevLogin"

@@ -1824,6 +1824,48 @@ class GlpiClient
         );
     }
 
+    /**
+     * ¿El usuario está deshabilitado en GLPI (inactivo o en la papelera)? Se usa
+     * para impedir el ingreso al portal: GLPI es donde TI da de baja a la gente.
+     *
+     * Falla "abierto": si GLPI no está configurado, no responde o el usuario aún
+     * no existe allí (lo crea el alta JIT), devuelve false. Así una caída de GLPI
+     * no deja fuera a todos. El resultado se cachea 10 min por correo (lo usa el
+     * middleware en cada request); $fresh fuerza la consulta (login).
+     */
+    public function isUserDisabled(string $email, bool $fresh = false): bool
+    {
+        if (! $this->isConfigured()) {
+            return false;
+        }
+
+        $key = 'glpi:user_disabled:'.sha1(mb_strtolower($email));
+        if (! $fresh && Cache::has($key)) {
+            return (bool) Cache::get($key);
+        }
+
+        try {
+            $user = $this->driver() === 'oauth'
+                ? $this->oauthFindUser($email)
+                : $this->legacyFindUser($email);
+        } catch (\Throwable $e) {
+            Log::warning('GLPI: no se pudo verificar si el usuario está habilitado', [
+                'email' => $email, 'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+
+        // v2 entrega booleanos; legacy, 0/1.
+        $disabled = is_array($user)
+            && (! filter_var($user['is_active'] ?? true, FILTER_VALIDATE_BOOL)
+                || filter_var($user['is_deleted'] ?? false, FILTER_VALIDATE_BOOL));
+
+        Cache::put($key, $disabled, now()->addMinutes(10));
+
+        return $disabled;
+    }
+
     /** Clave de caché para el id de GLPI de un correo (según el modo de match). */
     protected function userIdCacheKey(string $email): string
     {
@@ -2072,6 +2114,14 @@ class GlpiClient
 
     protected function oauthFindUserId(string $email): ?int
     {
+        $user = $this->oauthFindUser($email);
+
+        return $user['id'] ?? null;
+    }
+
+    /** Registro completo del usuario en GLPI (API v2) buscado por correo, o null. */
+    protected function oauthFindUser(string $email): ?array
+    {
         // Confirmado con token real: el email vive en la subpropiedad
         // "emails.email" (no "emails" a secas, que no filtra).
         $field = $this->config['requester_match'] === 'login' ? 'name' : 'emails.email';
@@ -2083,7 +2133,7 @@ class GlpiClient
 
         $rows = $response->json();
 
-        return is_array($rows) ? ($rows[0]['id'] ?? null) : null;
+        return is_array($rows) && is_array($rows[0] ?? null) ? $rows[0] : null;
     }
 
     protected function oauthTicketsForUser(int $userId): array
@@ -2294,6 +2344,19 @@ class GlpiClient
         ]);
 
         return $response->json('data.0.2');
+    }
+
+    /** Registro completo del usuario en GLPI (API legacy) buscado por correo, o null. */
+    protected function legacyFindUser(string $email): ?array
+    {
+        $id = $this->legacyFindUserId($email);
+        if ($id === null) {
+            return null;
+        }
+
+        $user = $this->legacyHttp()->get("/User/{$id}")->json();
+
+        return is_array($user) && isset($user['id']) ? $user : null;
     }
 
     /* ===================================================================

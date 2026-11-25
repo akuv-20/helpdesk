@@ -29,16 +29,25 @@ class EntraController extends Controller
     }
 
     /** Puerta A — redirige al login de Microsoft/Entra (OIDC). */
-    public function redirect(): RedirectResponse
+    public function redirect(Request $request): RedirectResponse
     {
         if (blank($this->applyConfig()['client_id'])) {
             return redirect()->route('login')
                 ->with('error', 'El inicio de sesión con Entra ID aún no está configurado.');
         }
 
-        return Socialite::driver('microsoft')
-            ->scopes(['openid', 'profile', 'email', 'User.Read'])
-            ->redirect();
+        $driver = Socialite::driver('microsoft')
+            ->scopes(['openid', 'profile', 'email', 'User.Read']);
+
+        // ?otra=1 (botón tras el aviso de usuario deshabilitado): fuerza el
+        // selector de cuentas de Entra (+ "Usar otra cuenta") para no reentrar
+        // con la cuenta genérica abierta en el navegador. El login normal no lo
+        // fuerza: con una sola cuenta entra directo (con varias, Entra ya pregunta).
+        if ($request->boolean('otra')) {
+            $driver->with(['prompt' => 'select_account']);
+        }
+
+        return $driver->redirect();
     }
 
     /** Puerta A — callback de Entra: crea/encuentra al usuario y abre sesión. */
@@ -59,6 +68,11 @@ class EntraController extends Controller
         if (blank($email)) {
             return redirect()->route('login')
                 ->with('error', 'Entra no entregó un correo válido para este usuario.');
+        }
+
+        // Usuario dado de baja en GLPI (inactivo): no entra al portal.
+        if (app(GlpiClient::class)->isUserDisabled($email, fresh: true)) {
+            return redirect()->route('login')->with('disabledUser', $email);
         }
 
         // Zona horaria derivada del país que entrega Entra (campo country).

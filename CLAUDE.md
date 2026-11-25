@@ -30,6 +30,15 @@ sin esperar al primer ticket— y de paso completa su zona horaria; nunca lanza 
 `GlpiClient::ensureUser()` sigue como **red de seguridad** (idempotente: si ya se creó en el login, solo
 resuelve el id). `ensureUser()` sí lanza (`requireLegacy`), por eso en el login se usa el wrapper seguro.
 
+**Usuarios deshabilitados:** quien esté **inactivo o en la papelera en GLPI** (`is_active`/`is_deleted`) no entra
+al portal. `GlpiClient::isUserDisabled()` se consulta en `EntraController::callback` (antes de crear el usuario local)
+y en el middleware `enabled` (`EnsureUserIsEnabled`, en los grupos `auth`), que cierra sesiones ya abiertas (cache 10
+min por correo). El login muestra "El usuario X está deshabilitado. Contacta al departamento de TI" (flash
+`disabledUser`). Falla **abierto**: si GLPI no responde o el usuario no existe aún allí, se deja entrar.
+Tras el aviso, el botón pasa a "Ingresar con otra cuenta" (`/auth/entra/redirect?otra=1`), que agrega
+`prompt=select_account` para elegir otra cuenta (no reentrar con la genérica abierta en el navegador). El login
+normal NO fuerza el selector: con una sola cuenta entra directo (con varias, Entra ya pregunta).
+
 **Zona horaria:** en el login se pide el campo `country` a Graph (`config services.microsoft.fields`) y
 `EntraController::timezoneFromCountry()` la deriva (CL/Chile→America/Santiago, PE/Perú→America/Lima),
 guardándola en `users.timezone` (se actualiza en cada login). Hacia GLPI va por dos vías: en el **alta JIT**
@@ -190,5 +199,5 @@ un campo nativo y filtrable. Si en el futuro se necesitan campos extra, habría 
 composer install && npm install   # en el server de prod: php8.4 /usr/local/bin/composer install
 php artisan migrate          # sin seeders: las categorías viven en GLPI
 npm run dev                  # o npm run build
-php artisan test             # 26 tests (PortalFlow, IntegrationModule, Entra, Branding)
+php artisan test             # 33 tests (PortalFlow, IntegrationModule, Entra, Branding, DisabledUser)
 ```

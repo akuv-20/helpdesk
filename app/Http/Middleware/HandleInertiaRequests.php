@@ -49,6 +49,8 @@ class HandleInertiaRequests extends Middleware
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),
+                // Correo del usuario deshabilitado en GLPI → aviso en el login.
+                'disabledUser' => fn () => $request->session()->get('disabledUser'),
                 // Número del ticket recién creado → modal de confirmación.
                 'createdTicket' => fn () => $request->session()->get('createdTicket'),
             ],
